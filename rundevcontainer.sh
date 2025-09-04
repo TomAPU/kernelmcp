@@ -5,6 +5,7 @@ IMAGE_NAME="kernelmcp"
 CONTAINER_NAME="kernelmcp-dev"
 HOST_PORT=3125
 ADDITIONAL_FOLDER=""
+PERMANENT=false
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
@@ -14,6 +15,7 @@ Usage: $(basename "$0") [options]
 Options:
   -p, --port <host_port>     Map host <host_port> to container 3125 (default: 3125)
   -f, --folder <path>        Also mount <path> at /additional inside the container
+  -pm, --permanent           Run container without --rm, reuse if it already exists
   -h, --help                 Show this help
 
 Behavior:
@@ -24,7 +26,7 @@ Behavior:
 EOF
 }
 
-# --- Parse args (support short and long) ---
+# --- Parse args ---
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -p|--port)
@@ -33,6 +35,8 @@ while [[ $# -gt 0 ]]; do
     -f|--folder)
       [[ $# -ge 2 ]] || { echo "Error: missing value for $1"; exit 1; }
       ADDITIONAL_FOLDER="$2"; shift 2 ;;
+    -pm|--permanent)
+      PERMANENT=true; shift ;;
     -h|--help)
       usage; exit 0 ;;
     *)
@@ -46,7 +50,7 @@ if [[ -n "${ADDITIONAL_FOLDER}" && ! -e "${ADDITIONAL_FOLDER}" ]]; then
   exit 1
 fi
 
-# --- Ensure image exists (build if missing) ---
+# --- Ensure image exists ---
 if ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
   echo "Image '${IMAGE_NAME}' not found. Building..."
   USERNAME="$(id -un)"
@@ -59,35 +63,33 @@ if ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
     -t "${IMAGE_NAME}" .
 fi
 
-# --- Remove any existing container with the same name ---
+# --- If container already exists ---
 if docker ps -a --format '{{.Names}}' | grep -Fxq "${CONTAINER_NAME}"; then
-  echo "Removing existing container '${CONTAINER_NAME}'..."
-  docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+  if docker ps --format '{{.Names}}' | grep -Fxq "${CONTAINER_NAME}"; then
+    echo "Container '${CONTAINER_NAME}' is already running."
+    echo "Attach with: docker exec -it ${CONTAINER_NAME} bash"
+    exit 0
+  else
+    echo "Starting existing container '${CONTAINER_NAME}'..."
+    exec docker start -ai "${CONTAINER_NAME}"
+  fi
 fi
 
 # --- Compose docker run options ---
-RUN_OPTS=( --name "${CONTAINER_NAME}" --privileged --rm -it )
+RUN_OPTS=( --name "${CONTAINER_NAME}" --privileged -it )
+$PERMANENT || RUN_OPTS+=( --rm )
 RUN_OPTS+=( -p "${HOST_PORT}:3125" )
 RUN_OPTS+=( -v "${PWD}:/kernelmcp" )
 
-# Pass through KVM device if present (helps nested virtualization)
 if [[ -e /dev/kvm ]]; then
   RUN_OPTS+=( --device /dev/kvm )
 fi
 
-# Optional additional mount
 if [[ -n "${ADDITIONAL_FOLDER}" ]]; then
-  # Resolve to absolute path for safety
   ADD_ABS="$(cd "$(dirname "${ADDITIONAL_FOLDER}")" && pwd)/$(basename "${ADDITIONAL_FOLDER}")"
   RUN_OPTS+=( -v "${ADD_ABS}:/additional" )
 fi
 
 # --- Run the container ---
-echo "Starting container '${CONTAINER_NAME}' from image '${IMAGE_NAME}'..."
-echo "  Port mapping: host ${HOST_PORT} -> container 3125"
-echo "  Mounts: ${PWD} -> /kernelmcp"
-if [[ -n "${ADDITIONAL_FOLDER}" ]]; then
-  echo "          ${ADDITIONAL_FOLDER} -> /additional"
-fi
-
+echo "Creating new container '${CONTAINER_NAME}' from image '${IMAGE_NAME}'..."
 exec docker run "${RUN_OPTS[@]}" "${IMAGE_NAME}"
