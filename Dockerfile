@@ -29,9 +29,15 @@ RUN apt-get update && \
       libffi-dev liblzma-dev xz-utils llvm \
       libncurses-dev libncurses5-dev libncursesw5-dev \
       bison flex libelf-dev bc gdb \
+      debootstrap cmake wget libmpfr-dev libdw-dev \
       qemu-system-x86 qemu-utils qemu-kvm \
       libvirt-daemon-system libvirt-clients bridge-utils \
     && rm -rf /var/lib/apt/lists/*
+
+# Fix for libmpfr version mismatch
+RUN if [ ! -f /usr/lib/x86_64-linux-gnu/libmpfr.so.4 ]; then \
+      ln -s /usr/lib/x86_64-linux-gnu/libmpfr.so /usr/lib/x86_64-linux-gnu/libmpfr.so.4; \
+    fi
 
 # Generate locale
 RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen && \
