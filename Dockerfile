@@ -32,6 +32,8 @@ RUN apt-get update && \
       debootstrap cmake wget libmpfr-dev libdw-dev \
       qemu-system-x86 qemu-utils qemu-kvm \
       libvirt-daemon-system libvirt-clients bridge-utils \
+      clang-15 lld-15 llvm-15 llvm-15-dev libclang-15-dev libc++-15-dev libc++abi-15-dev \
+      jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Fix for libmpfr version mismatch
