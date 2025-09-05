@@ -4,6 +4,8 @@ FROM ubuntu:24.04
 ARG USERNAME=devuser
 ARG UID=1000
 ARG GID=1000
+# CodeQL CLI version to install. Newer versions should work by just bumping this.
+ARG CODEQL_VERSION=2.23.0
 
 # Common environment settings
 ENV LANG=en_US.UTF-8 \
@@ -33,7 +35,7 @@ RUN apt-get update && \
       qemu-system-x86 qemu-utils qemu-kvm \
       libvirt-daemon-system libvirt-clients bridge-utils \
       clang-15 lld-15 llvm-15 llvm-15-dev libclang-15-dev libc++-15-dev libc++abi-15-dev \
-      jq \
+      jq unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Fix for libmpfr version mismatch
@@ -49,6 +51,17 @@ RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen && \
 # Install uv (does not use system pip)
 ENV UV_INSTALL_DIR=/usr/local/bin
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && uv --version
+
+# ---------- Install CodeQL CLI ----------
+# Layout: /opt/codeql/codeql, /opt/codeql/**.qlpack, etc.
+RUN mkdir -p /opt && \
+    cd /opt && \
+    curl -fL --retry 5 --connect-timeout 20 \
+      https://github.com/github/codeql-cli-binaries/releases/download/v${CODEQL_VERSION}/codeql-linux64.zip \
+      -o codeql.zip && \
+    unzip codeql.zip && rm -f codeql.zip && \
+    /opt/codeql/codeql --version && \
+    ln -s /opt/codeql/codeql /usr/bin/codeql
 
 # Create non-root user and grant privileges
 RUN groupadd -g ${GID} ${USERNAME} && \
