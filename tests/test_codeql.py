@@ -63,10 +63,7 @@ def test_cpp_query_csv(make_codeql_db):
     select f, f.getName()
     """
 
-    csv_text = ql.run_query_text_csv(query)
-
-    # basic CSV assertions
-    rows = list(csv.reader(csv_text.splitlines()))
+    rows = ql.run_query_text_csv(query)
     assert len(rows) >= 2  # header + at least one row
 
     # find a value 'add' in any cell (should appear in second column)

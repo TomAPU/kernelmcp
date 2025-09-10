@@ -36,7 +36,7 @@ class CodeQLCpp:
         keep_temp: bool = False,
         persistent_pack_dir: Optional[str] = None,
         result_set: Optional[str] = "#select",
-    ) -> str:
+    ) -> List[List[str]]:
         """
         Run a C/C++ CodeQL query string against this DB and return decoded CSV text.
 
@@ -45,7 +45,7 @@ class CodeQLCpp:
         :param keep_temp: Keep temp dir for debugging.
         :param persistent_pack_dir: Reuse this dir as pack root to avoid reinstalling each call.
         :param result_set: If provided, pass --result-set=<name> to decoder (e.g. "#select" or custom).
-        :return: CSV contents as a string.
+        :return: CSV 
         """
         temp_mgr = None
         if persistent_pack_dir:
@@ -88,7 +88,8 @@ class CodeQLCpp:
             decode_cmd.insert(2, f"--result-set={result_set}")
             self._run(decode_cmd, timeout=timeout)
 
-            return csv_file.read_text(encoding="utf-8")
+            csv_text = csv_file.read_text(encoding="utf-8")
+            return list(csv.reader(csv_text.splitlines()))
 
         finally:
             if temp_mgr and not keep_temp:
