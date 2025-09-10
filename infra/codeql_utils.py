@@ -4,6 +4,8 @@ import csv
 import shutil
 import subprocess
 import tempfile
+import time
+import logging
 from pathlib import Path
 from typing import List, Optional
 
@@ -18,8 +20,15 @@ class CodeQLCpp:
     - Decodes BQRS to CSV and returns CSV text (str)
     """
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, logger: Optional[logging.Logger] = None):
+        # ---- minimal logging hook (no signature change) ----
+        self.logger = logger
+        if not self.logger:
+            self.logger = logging.getLogger(__name__)
+            self.logger.addHandler(logging.NullHandler())
+
         self.db_path = Path(db_path).resolve()
+        self.logger.debug("Init CodeQLCpp: db_path=%s", self.db_path)
         if not self.db_path.exists():
             raise FileNotFoundError(
                 f"Database path does not exist: {self.db_path}")
@@ -47,23 +56,32 @@ class CodeQLCpp:
         :param result_set: If provided, pass --result-set=<name> to decoder (e.g. "#select" or custom).
         :return: CSV list of rows (including header).
         """
+        self.logger.debug(
+            "run_query_text_csv start (result_set=%s, keep_temp=%s, persistent_pack_dir=%s)",
+            result_set, keep_temp, bool(persistent_pack_dir)
+        )
+
         temp_mgr = None
         if persistent_pack_dir:
             pack_dir = Path(persistent_pack_dir).resolve()
             pack_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.debug("Using persistent pack_dir: %s", pack_dir)
         else:
             temp_mgr = tempfile.TemporaryDirectory()
             pack_dir = Path(temp_mgr.name)
+            self.logger.debug("Using temporary pack_dir: %s", pack_dir)
 
         try:
             # 1) qlpack with C/C++ dependency
-            (pack_dir / "qlpack.yml").write_text(
+            qlpack_path = pack_dir / "qlpack.yml"
+            qlpack_path.write_text(
                 "name: tmp-cpp-query\n"
                 "version: 0.0.0\n"
                 "dependencies:\n"
                 "  codeql/cpp-all: \"*\"\n",
                 encoding="utf-8",
             )
+            self.logger.debug("Wrote qlpack.yml -> %s", qlpack_path)
 
             # 2) install deps -> lock file
             self._run(["pack", "install"], cwd=pack_dir, timeout=timeout)
@@ -73,6 +91,8 @@ class CodeQLCpp:
             bqrs_file = pack_dir / "tmp_result.bqrs"
             csv_file = pack_dir / "tmp_result.csv"
             ql_file.write_text(query, encoding="utf-8")
+            self.logger.debug("Wrote query -> %s (bytes=%d)",
+                              ql_file, ql_file.stat().st_size)
 
             # 4) run query -> bqrs
             self._run(
@@ -80,6 +100,11 @@ class CodeQLCpp:
                     ql_file), f"--database={self.db_path}", f"--output={bqrs_file}"],
                 timeout=timeout,
             )
+            if not bqrs_file.exists():
+                self.logger.error("BQRS not produced: %s", bqrs_file)
+                raise RuntimeError(f"BQRS was not produced: {bqrs_file}")
+            self.logger.debug("BQRS OK -> %s (bytes=%d)",
+                              bqrs_file, bqrs_file.stat().st_size)
 
             # 5) decode -> content
             decode_cmd = ["bqrs", "decode", "--format=csv",
@@ -88,8 +113,15 @@ class CodeQLCpp:
             decode_cmd.insert(2, f"--result-set={result_set}")
             self._run(decode_cmd, timeout=timeout)
 
+            if not csv_file.exists():
+                raise RuntimeError(f"CSV was not produced for: {bqrs_file}")
             csv_text = csv_file.read_text(encoding="utf-8")
-            return list(csv.reader(csv_text.splitlines()))
+            if not csv_text.strip():
+                raise RuntimeError("Query returned no results (empty CSV)")
+
+            rows = list(csv.reader(csv_text.splitlines()))
+            self.logger.info("Decoded CSV rows=%d", len(rows))
+            return rows
 
         finally:
             if temp_mgr and not keep_temp:
@@ -98,13 +130,27 @@ class CodeQLCpp:
     # -------------- internals --------------
 
     def _run(self, args: List[str], cwd: Optional[Path] = None, timeout: Optional[int] = None) -> str:
+        cmd = ["codeql"] + args
+        cwd_str = str(cwd) if cwd else None
+        self.logger.debug("Exec: %s (cwd=%s, timeout=%s)",
+                          " ".join(cmd), cwd_str, timeout)
+
+        t0 = time.time()
         proc = subprocess.run(
-            ["codeql"] + args,
-            cwd=str(cwd) if cwd else None,
+            cmd,
+            cwd=cwd_str,
             capture_output=True,
             text=True,
             timeout=timeout,
         )
+        dt = time.time() - t0
+
         if proc.returncode != 0:
-            raise RuntimeError(proc.stderr.strip() or proc.stdout.strip())
-        return proc.stdout.strip()
+            err = (proc.stderr or proc.stdout or "").strip()
+            self.logger.error("Non-zero exit rc=%d (%.2fs)\n---- stderr/stdout ----\n%s",
+                              proc.returncode, dt, err)
+            raise RuntimeError(err)
+        out = (proc.stdout or "").strip()
+        self.logger.debug("OK rc=0 (%.2fs), stdout_lines=%d",
+                          dt, len(out.splitlines()))
+        return out
