@@ -45,7 +45,7 @@ class CodeQLCpp:
         :param keep_temp: Keep temp dir for debugging.
         :param persistent_pack_dir: Reuse this dir as pack root to avoid reinstalling each call.
         :param result_set: If provided, pass --result-set=<name> to decoder (e.g. "#select" or custom).
-        :return: CSV 
+        :return: CSV list of rows (including header).
         """
         temp_mgr = None
         if persistent_pack_dir:
