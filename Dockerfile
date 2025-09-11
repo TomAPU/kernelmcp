@@ -49,16 +49,16 @@ RUN apt-get update && \
 # Dev toolchain and Python 3.12
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      git make build-essential \
-      python3 python3-pip python3-venv python3-dev \
-      libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev \
-      libffi-dev liblzma-dev xz-utils llvm \
-      libncurses-dev libncurses5-dev libncursesw5-dev \
-      bison flex libelf-dev bc gdb \
-      debootstrap cmake wget libmpfr-dev libdw-dev \
-      qemu-system-x86 qemu-utils qemu-kvm \
-      libvirt-daemon-system libvirt-clients bridge-utils \
-      jq unzip \
+    git make build-essential \
+    python3 python3-pip python3-venv python3-dev \
+    libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev \
+    libffi-dev liblzma-dev xz-utils llvm \
+    libncurses-dev libncurses5-dev libncursesw5-dev \
+    bison flex libelf-dev bc gdb \
+    debootstrap cmake wget libmpfr-dev libdw-dev \
+    qemu-system-x86 qemu-utils qemu-kvm \
+    libvirt-daemon-system libvirt-clients bridge-utils \
+    jq unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # -------- NEW: bring in the freshly built LLVM/Clang/clangd-indexer --------
@@ -68,7 +68,7 @@ RUN echo "/opt/llvm/lib" > /etc/ld.so.conf.d/llvm-15.conf && ldconfig
 
 # Fix for libmpfr version mismatch
 RUN if [ ! -f /usr/lib/x86_64-linux-gnu/libmpfr.so.4 ]; then \
-      ln -s /usr/lib/x86_64-linux-gnu/libmpfr.so /usr/lib/x86_64-linux-gnu/libmpfr.so.4; \
+    ln -s /usr/lib/x86_64-linux-gnu/libmpfr.so /usr/lib/x86_64-linux-gnu/libmpfr.so.4; \
     fi
 
 # Generate locale
@@ -85,8 +85,8 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && uv --version
 RUN mkdir -p /opt && \
     cd /opt && \
     curl -fL --retry 5 --connect-timeout 20 \
-      https://github.com/github/codeql-cli-binaries/releases/download/v${CODEQL_VERSION}/codeql-linux64.zip \
-      -o codeql.zip && \
+    https://github.com/github/codeql-cli-binaries/releases/download/v${CODEQL_VERSION}/codeql-linux64.zip \
+    -o codeql.zip && \
     unzip codeql.zip && rm -f codeql.zip && \
     /opt/codeql/codeql --version && \
     ln -s /opt/codeql/codeql /usr/bin/codeql
