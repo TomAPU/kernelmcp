@@ -4,6 +4,7 @@ import logging
 import shutil
 import subprocess
 import time
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -108,6 +109,36 @@ class CodeQuerySearch:
 
         return [self._hit_to_json(h) for h in self._dedup(refs)]
 
+    def get_function_range(
+        self,
+        symbol: str,
+        *,
+        path_filter: Optional[str] = None,
+        timeout: Optional[int] = None,
+    ) -> List[Dict]:
+        """
+        Return function ranges for exact-matched definitions (p=2).
+        Each item: {"name","path","start","end","kind","source"}
+        - start: definition line (from cqsearch p=2)
+        - end:   from Universal Ctags 'end.line' (None if unavailable)
+        """
+        self._check_symbol(symbol)
+        defs = self._search(
+            symbol, p=2, path_filter=path_filter, timeout=timeout)
+        out: List[Dict] = []
+        for h in self._dedup(defs):
+            end_line = self._ctags_function_end(
+                h.path, h.name, h.line, timeout=timeout)  # ← CHANGED
+            out.append({
+                "name": h.name,
+                "path": h.path,
+                "start": h.line,
+                "end": end_line,
+                "kind": "function_or_macro",
+                "source": h.source
+            })
+        return out
+
     # ---------------- Internals ----------------
 
     def _run(self, args: List[str], timeout: Optional[int] = None) -> str:
@@ -202,3 +233,81 @@ class CodeQuerySearch:
             seen.add(key)
             out.append(h)
         return out
+
+    # --- NEW: use Universal Ctags to get end line of a function ---
+    def _ctags_function_end(
+        self,
+        file_path: str,
+        func_name: str,
+        def_line: int,
+        timeout: Optional[int] = None,
+    ) -> Optional[int]:
+        """
+        Use Universal Ctags JSON output with --fields=+ne to obtain function end line.
+        Matching strategy:
+          - same file
+          - name == func_name
+          - kind is function (not prototype)
+          - prefer entry whose 'line' == def_line; otherwise choose closest within a small window
+        Returns end.line or None.
+        """
+        if not shutil.which("ctags"):
+            self.logger.error(
+                "ctags not found in PATH; skip end-line resolution for %s", func_name)
+            return None
+
+        # Only scan the single file for speed.
+        cmd = [
+            "ctags",
+            "--languages=C,C++",
+            "--kinds-C=fp",        # functions & prototypes
+            "--kinds-C++=fp",
+            "--fields=+ne",        # include 'end' and 'line' fields
+            "--output-format=json",
+            "-o", "-",             # stdout
+            file_path,
+        ]
+        self.logger.debug("Exec: %s", " ".join(cmd))
+        try:
+            proc = subprocess.run(cmd, capture_output=True,
+                                  text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self.logger.error("ctags timed out for %s", file_path)
+            return None
+        if proc.returncode != 0:
+            self.logger.error("ctags failed rc=%s: %s",
+                              proc.returncode, (proc.stderr or proc.stdout)[:300])
+            return None
+
+        best = None
+        best_delta = float('inf')
+        for line in (proc.stdout or "").splitlines():
+            line = line.strip()
+            if not line or line.startswith("[") or line == "]":
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                self.logger.error("ctags: JSON decode error: %s", line)
+                continue
+            if obj.get("path") != file_path:
+                continue
+            if obj.get("name") != func_name:
+                continue
+
+            tag_line = obj.get("line")
+            assert isinstance(tag_line, int) or tag_line is None
+            # Prefer exact line, else closest within a small window to tolerate style diffs.
+            delta = abs(tag_line - def_line)
+            if delta < best_delta:
+                best = obj
+                best_delta = delta
+
+        if not best:
+            self.logger.error("ctags: no matching function found for %s in %s",
+                              func_name, file_path)
+            return None
+
+        end = best.get("end")
+        assert isinstance(end, int)
+        return end

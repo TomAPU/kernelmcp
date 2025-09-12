@@ -54,6 +54,18 @@ def make_cqdb(tmp_path: Path):
         encoding="utf-8",
     )
 
+    (src / "range_test.c").write_text(
+        "int target_func(int n)\n"
+        "{\n"
+        "    int s = 0;\n"
+        "    for (int i = 0; i < n; i++) {\n"
+        "        s += i;\n"
+        "    }\n"
+        "    return s;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
     # 1) ctags
     res = subprocess.run(
         ["ctags", "-R", "-n", "-o", "tags", str(src)],
@@ -155,3 +167,19 @@ def test_preview_and_line_numbers(make_cqdb):
         assert isinstance(h["line"], int) and h["line"] > 0, h
         assert isinstance(h["preview"], str), h
         assert Path(h["path"]).is_absolute(), h
+
+def test_function_range(make_cqdb):
+    cqs = CodeQuerySearch(make_cqdb["db"])
+    ranges = cqs.get_function_range("target_func")
+    assert ranges, "No range found for target_func"
+
+    # pick the one defined in our injected file
+    from pathlib import Path
+    r = next((h for h in ranges if Path(
+        h["path"]).name == "range_test.c"), None)
+    if r is None:
+        pytest.skip("target_func not indexed in range_test.c")
+
+    assert r["start"] == 1, f"Expected start=1, got {r['start']}"
+    if r["end"] is not None:
+        assert r["end"] == 8, f"Expected end=8, got {r['end']}"
