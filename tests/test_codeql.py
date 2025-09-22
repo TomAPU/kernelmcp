@@ -4,8 +4,7 @@ import shutil
 import subprocess
 from pathlib import Path
 import pytest
-
-from infra.codeql_utils import CodeQLCpp
+from kernelmcp.infra import CodeQLCpp
 
 
 def _which_compiler():

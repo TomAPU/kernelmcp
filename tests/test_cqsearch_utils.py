@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 import pytest
 
-from infra.cqsearch_utils import CodeQuerySearch
+from kernelmcp.infra import CodeQuerySearch
 
 
 @pytest.fixture(scope="function")
@@ -167,6 +167,7 @@ def test_preview_and_line_numbers(make_cqdb):
         assert isinstance(h["line"], int) and h["line"] > 0, h
         assert isinstance(h["preview"], str), h
         assert Path(h["path"]).is_absolute(), h
+
 
 def test_function_range(make_cqdb):
     cqs = CodeQuerySearch(make_cqdb["db"])
