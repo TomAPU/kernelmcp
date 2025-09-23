@@ -20,6 +20,8 @@ def discover_plugins() -> List[Type[McpPlugin]]:
 
     plugins_dir = plugins_path[0]  # kernelmcp/plugins
     for name in os.listdir(plugins_dir):
+        if name.startswith("_"):
+            continue
         subdir = os.path.join(plugins_dir, name)
         if not os.path.isdir(subdir):
             continue
