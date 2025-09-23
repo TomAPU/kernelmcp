@@ -58,7 +58,7 @@ RUN apt-get update && \
     debootstrap cmake wget libmpfr-dev libdw-dev \
     qemu-system-x86 qemu-utils qemu-kvm \
     libvirt-daemon-system libvirt-clients bridge-utils \
-    jq unzip cscope codequery universal-ctags \
+    jq unzip cscope codequery universal-ctags ripgrep \
     && rm -rf /var/lib/apt/lists/*
 
 # -------- NEW: bring in the freshly built LLVM/Clang/clangd-indexer --------
