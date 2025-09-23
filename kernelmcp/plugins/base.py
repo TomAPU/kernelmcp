@@ -31,6 +31,8 @@ class McpPlugin(ABC):
         for attr_name in dir(self):
             method = getattr(self, attr_name)
             if callable(method) and getattr(method, "_is_mcp_tool", False):
+                self.logger.info(
+                    f"Registering tool: {attr_name} for Plugin: {self.NAME}")
                 mcp.tool()(method)
 
         self._post_init()
