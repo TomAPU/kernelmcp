@@ -1,6 +1,21 @@
 from kernelmcp.plugins import McpPlugin, mcp_tool
 from kernelmcp.infra import CodeQuerySearch
-from typing import List, Dict
+from typing import List, Dict, Any, Callable
+
+
+class _NullDB:
+    """Minimal null-object: any method logs warning and returns []"""
+
+    def __init__(self, logger, plugin_name: str):
+        self._logger = logger
+        self._name = plugin_name
+
+    def __getattr__(self, name: str) -> Callable[..., List[Dict]]:
+        def _missing(*args, **kwargs):
+            if self._logger:
+                self._logger.error(f"{self._name} plugin: db not initialized.")
+            return []
+        return _missing
 
 
 class CodeLookup(McpPlugin):
@@ -13,6 +28,7 @@ class CodeLookup(McpPlugin):
         if not db_path:
             self.logger.warning(
                 f"{self.NAME} plugin: 'db_path' not set in config, some features may not work.")
+            self.db = _NullDB(self.logger, self.NAME)
             return
         self.logger.info(f"{self.NAME} plugin using db_path: {db_path}")
         self.db = CodeQuerySearch(db_path)
@@ -22,7 +38,18 @@ class CodeLookup(McpPlugin):
         """
         Get the definition of a symbol from the code database.
         """
-        if not hasattr(self, 'db'):
-            self.logger.error(f"{self.NAME} plugin: db not initialized.")
-            return []
         return self.db.get_definition(symbol)
+
+    @mcp_tool
+    def get_reference(self, symbol: str) -> List[Dict]:
+        """
+        Get the references of a symbol from the code database.
+        """
+        return self.db.get_reference(symbol)
+
+    @mcp_tool
+    def get_function_range(self, symbol: str) -> List[Dict]:
+        """
+        Get the filename and line range of a function definition from the code database.
+        """
+        return self.db.get_function_range(symbol)
