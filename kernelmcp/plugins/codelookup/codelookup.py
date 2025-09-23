@@ -1,4 +1,4 @@
-from kernelmcp.plugins import McpPlugin, mcp_tool
+from kernelmcp.plugins import McpPlugin, mcp_tool, limit_list
 from kernelmcp.infra import CodeQuerySearch
 from typing import List, Dict, Any, Callable
 
@@ -34,6 +34,7 @@ class CodeLookup(McpPlugin):
         self.db = CodeQuerySearch(db_path)
 
     @mcp_tool
+    @limit_list(max_items=50)
     def get_definition(self, symbol: str) -> List[Dict]:
         """
         Get the definition of a symbol from the code database.
@@ -41,6 +42,7 @@ class CodeLookup(McpPlugin):
         return self.db.get_definition(symbol)
 
     @mcp_tool
+    @limit_list(max_items=50)
     def get_reference(self, symbol: str) -> List[Dict]:
         """
         Get the references of a symbol from the code database.
@@ -48,6 +50,7 @@ class CodeLookup(McpPlugin):
         return self.db.get_reference(symbol)
 
     @mcp_tool
+    @limit_list(max_items=50)
     def get_function_range(self, symbol: str) -> List[Dict]:
         """
         Get the filename and line range of a function definition from the code database.
