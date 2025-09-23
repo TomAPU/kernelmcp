@@ -46,7 +46,7 @@ kernelmcp/plugins/hello/hello.py
 
 
 ```python
-from kernelmcp.plugins import McpPlugin, mcp_tool
+from kernelmcp.plugins import McpPlugin, mcp_tool,limit_list
 
 class HelloPlugin(McpPlugin):
 
@@ -56,6 +56,11 @@ class HelloPlugin(McpPlugin):
     @mcp_tool
     def add(a,b):
         return a+b
+    # Limit the number of list result via limit_list decorator (default value: 50)
+    @mcp_tool
+    @limit_list
+    def give_me_numers(n):
+        return list(range(n))
 
 ````
 
