@@ -1,4 +1,4 @@
-from .codeql_utils import CodeQLCpp
-from .cqsearch_utils import CodeQuerySearch
+from .codeql import CodeQLCpp
+from .cqsearch import CodeQuerySearch
 
 __all__ = ["CodeQLCpp", "CodeQuerySearch"]
