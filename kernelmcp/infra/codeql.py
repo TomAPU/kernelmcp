@@ -2,12 +2,12 @@
 from __future__ import annotations
 import csv
 import shutil
-import subprocess
 import tempfile
 import time
 import logging
 from pathlib import Path
 from typing import List, Optional
+from .utils import run_cmd
 
 
 class CodeQLCpp:
@@ -131,26 +131,6 @@ class CodeQLCpp:
 
     def _run(self, args: List[str], cwd: Optional[Path] = None, timeout: Optional[int] = None) -> str:
         cmd = ["codeql"] + args
-        cwd_str = str(cwd) if cwd else None
-        self.logger.debug("Exec: %s (cwd=%s, timeout=%s)",
-                          " ".join(cmd), cwd_str, timeout)
-
-        t0 = time.time()
-        proc = subprocess.run(
-            cmd,
-            cwd=cwd_str,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        dt = time.time() - t0
-
-        if proc.returncode != 0:
-            err = (proc.stderr or proc.stdout or "").strip()
-            self.logger.error("Non-zero exit rc=%d (%.2fs)\n---- stderr/stdout ----\n%s",
-                              proc.returncode, dt, err)
-            raise RuntimeError(err)
-        out = (proc.stdout or "").strip()
-        self.logger.debug("OK rc=0 (%.2fs), stdout_lines=%d",
-                          dt, len(out.splitlines()))
-        return out
+        # Delegate actual subprocess execution to infra.utils.run_cmd so behavior
+        # (logging, timeout handling, error reporting) is consistent across infra.
+        return run_cmd(cmd, logger=self.logger, timeout=timeout, cwd=cwd)

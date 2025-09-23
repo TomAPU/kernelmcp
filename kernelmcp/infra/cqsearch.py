@@ -8,6 +8,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from .utils import run_cmd
 
 
 @dataclass
@@ -143,16 +144,8 @@ class CodeQuerySearch:
 
     def _run(self, args: List[str], timeout: Optional[int] = None) -> str:
         cmd = ["cqsearch"] + args
-        self.logger.debug("Exec: %s", " ".join(cmd))
-        t0 = time.time()
-        proc = subprocess.run(cmd, capture_output=True,
-                              text=True, timeout=timeout)
-        dt = time.time() - t0
-        if proc.returncode != 0:
-            err = (proc.stderr or proc.stdout or "").strip()
-            raise RuntimeError(
-                f"cqsearch rc={proc.returncode} ({dt:.2f}s)\n{err}")
-        return (proc.stdout or "").rstrip("\n")
+        # Use shared run_cmd to keep consistent logging/behavior across infra
+        return run_cmd(cmd, logger=self.logger, timeout=timeout)
 
     def _search(
         self,
@@ -269,19 +262,17 @@ class CodeQuerySearch:
         ]
         self.logger.debug("Exec: %s", " ".join(cmd))
         try:
-            proc = subprocess.run(cmd, capture_output=True,
-                                  text=True, timeout=timeout)
+            out = run_cmd(cmd, logger=self.logger, timeout=timeout)
         except subprocess.TimeoutExpired:
             self.logger.error("ctags timed out for %s", file_path)
             return None
-        if proc.returncode != 0:
-            self.logger.error("ctags failed rc=%s: %s",
-                              proc.returncode, (proc.stderr or proc.stdout)[:300])
+        except RuntimeError:
+            # run_cmd already logged the error; mirror previous behavior and return None
             return None
 
         best = None
         best_delta = float('inf')
-        for line in (proc.stdout or "").splitlines():
+        for line in (out or "").splitlines():
             line = line.strip()
             if not line or line.startswith("[") or line == "]":
                 continue
