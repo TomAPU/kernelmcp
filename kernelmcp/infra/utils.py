@@ -4,7 +4,7 @@ import time
 import logging
 from pathlib import Path
 from typing import List, Optional
-
+import shlex
 
 def run_cmd(
     cmd: List[str],
@@ -25,7 +25,7 @@ def run_cmd(
         logger.addHandler(logging.NullHandler())
 
     cwd_display = str(cwd) if cwd else None
-    logger.debug("Exec: %s (cwd=%s, timeout=%s)", " ".join(cmd), cwd_display, timeout)
+    logger.debug("Exec: %s (cwd=%s, timeout=%s)", shlex.join(cmd), cwd_display, timeout)
     t0 = time.time()
     proc = subprocess.run(
         cmd,
