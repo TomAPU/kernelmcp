@@ -1,21 +1,18 @@
 from kernelmcp.plugins import McpPlugin, mcp_tool, limit_list
 from kernelmcp.infra import CodeQuerySearch
 from typing import List, Dict, Any, Callable
+from functools import wraps
 
-
-class _NullDB:
-    """Minimal null-object: any method logs warning and returns []"""
-
-    def __init__(self, logger, plugin_name: str):
-        self._logger = logger
-        self._name = plugin_name
-
-    def __getattr__(self, name: str) -> Callable[..., List[Dict]]:
-        def _missing(*args, **kwargs):
-            if self._logger:
-                self._logger.error(f"{self._name} plugin: db not initialized.")
-            return []
-        return _missing
+def ensure_db():
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            self = args[0]
+            if not hasattr(self, 'db') or self.db is None:
+                raise RuntimeError(f"{self.NAME} plugin not properly initialized with CodeQuerySearch. Please check 'db_path' in config.")
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 class CodeLookup(McpPlugin):
@@ -28,12 +25,14 @@ class CodeLookup(McpPlugin):
         if not db_path:
             self.logger.warning(
                 f"{self.NAME} plugin: 'db_path' not set in config, some features may not work.")
-            self.db = _NullDB(self.logger, self.NAME)
+            self.db = None
             return
+
         self.logger.info(f"{self.NAME} plugin using db_path: {db_path}")
         self.db = CodeQuerySearch(db_path)
 
     @mcp_tool
+    @ensure_db()
     @limit_list(max_items=50)
     def get_definition(self, symbol: str) -> List[Dict]:
         """
@@ -42,14 +41,16 @@ class CodeLookup(McpPlugin):
         return self.db.get_definition(symbol)
 
     @mcp_tool
+    @ensure_db()
     @limit_list(max_items=50)
     def get_reference(self, symbol: str) -> List[Dict]:
         """
         Get the references of a symbol from the code database.
-        """
+        """     
         return self.db.get_reference(symbol)
 
     @mcp_tool
+    @ensure_db()
     @limit_list(max_items=50)
     def get_function_range(self, symbol: str) -> List[Dict]:
         """
