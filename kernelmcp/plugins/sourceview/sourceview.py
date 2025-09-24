@@ -74,7 +74,7 @@ class SourceViewPlugin(McpPlugin):
         Shows file path and size in bytes.
         """
         try:
-            return self.sv.list_files(rel_dir, pattern=None, recursive=True)
+            return self.sv.list_files(rel_dir, pattern=None, recursive=False)
         except Exception as e:
             self.logger.error(f"{self.NAME} list_files failed: {e}")
             return []
