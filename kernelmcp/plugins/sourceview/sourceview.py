@@ -39,8 +39,11 @@ class SourceViewPlugin(McpPlugin):
     def get_source(self, source_path: str, start: int, end: int) -> Dict:
         """
         Retrieve source code from a file between start and end lines (1-based, inclusive).
+        The returned "code" field includes line numbers.
         """
-        return self.sv.get_source(source_path, start=start, end=end, include_linenos=False)
+        ret = self.sv.get_source(source_path, start=start, end=end, include_linenos=True)
+        del ret['lines']  # remove detailed lines list to save space
+        return ret
 
     @mcp_tool
     @ensure_sv()
