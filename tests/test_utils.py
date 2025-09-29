@@ -4,6 +4,8 @@ from pathlib import Path
 import pytest
 
 from kernelmcp.infra.utils import run_cmd
+from kernelmcp.infra.utils import get_unused_port
+import socket
 
 
 def test_run_cmd_success(monkeypatch, tmp_path: Path):
@@ -37,3 +39,19 @@ def test_run_cmd_real_execution():
     """
     out = run_cmd(["echo", "it-works"])  # simple, portable on Linux containers
     assert out.strip() == "it-works"
+
+
+def test_get_unused_port():
+    port = get_unused_port()
+    assert isinstance(port, int)
+    assert 0 < port <= 65535
+
+    # Try binding to the returned port -- this should succeed because
+    # get_unused_port uses a short-lived socket and closed it, so the
+    # port should be available for immediate reuse.
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(("127.0.0.1", port))
+    finally:
+        s.close()
