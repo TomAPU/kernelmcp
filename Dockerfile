@@ -59,6 +59,7 @@ RUN apt-get update && \
     qemu-system-x86 qemu-utils qemu-kvm \
     libvirt-daemon-system libvirt-clients bridge-utils \
     jq unzip cscope codequery universal-ctags ripgrep \
+    gdbserver \
     && rm -rf /var/lib/apt/lists/*
 
 # -------- NEW: bring in the freshly built LLVM/Clang/clangd-indexer --------
