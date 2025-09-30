@@ -56,10 +56,17 @@ if ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
   USERNAME="$(id -un)"
   MY_UID="$(id -u)"
   MY_GID="$(id -g)"
+  if [[ -e /dev/kvm ]]; then
+    KVM_GID="$(stat -c "%g" /dev/kvm)"
+  else
+    echo "FAIL: /dev/kvm not found. KVM is required."
+    exit 1
+  fi
   docker build --no-cache \
     --build-arg USERNAME="${USERNAME}" \
     --build-arg UID="${MY_UID}" \
     --build-arg GID="${MY_GID}" \
+    --build-arg KVM_GID="${KVM_GID}" \
     -t "${IMAGE_NAME}" .
 fi
 
@@ -82,7 +89,7 @@ RUN_OPTS+=( -p "${HOST_PORT}:3125" )
 RUN_OPTS+=( -v "${PWD}:/kernelmcp" )
 
 if [[ -e /dev/kvm ]]; then
-  RUN_OPTS+=( --device /dev/kvm )
+  RUN_OPTS+=( --device /dev/kvm --group-add kvm )
 fi
 
 if [[ -n "${ADDITIONAL_FOLDER}" ]]; then

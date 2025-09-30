@@ -28,6 +28,7 @@ FROM ubuntu:24.04
 ARG USERNAME=devuser
 ARG UID=1000
 ARG GID=1000
+ARG KVM_GID=108
 # CodeQL CLI version to install. Newer versions should work by just bumping this.
 ARG CODEQL_VERSION=2.23.0
 
@@ -93,9 +94,15 @@ RUN mkdir -p /opt && \
     ln -s /opt/codeql/codeql /usr/bin/codeql
 
 # Create non-root user and grant privileges
-RUN groupadd -g ${GID} ${USERNAME} && \
+# Ensure kvm group exists with correct GID
+RUN if getent group kvm >/dev/null; then \
+      groupmod -o -g ${KVM_GID} kvm; \
+    else \
+      groupadd -g ${KVM_GID} kvm; \
+    fi && \
+    groupadd -g ${GID} ${USERNAME} && \
     useradd -m -u ${UID} -g ${GID} -s /bin/bash ${USERNAME} && \
-    usermod -a -G kvm,libvirt ${USERNAME} || true && \
+    usermod -a -G kvm ${USERNAME} || true && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Add ~/.local/bin and /opt/llvm/bin to PATH in interactive shells too
