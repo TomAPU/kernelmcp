@@ -1,26 +1,24 @@
+# Adapted from pwno-mcp
+# Original source: https://github.com/pwno-io/pwno-mcp/blob/main/pwnomcp/gdb/controller.py
 from __future__ import annotations
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple, Any
 
 from pygdbmi.gdbcontroller import GdbController
 
 
 class RemoteGdbMI:
     """
-    Minimal wrapper around pygdbmi for remote-GDB analysis.
-
-    - Accepts a local symbols path (e.g., vmlinux or an executable) and a remote TCP port
-      (connects to 127.0.0.1:<port>)
-    - GDB (mi2) is started and symbols are loaded at initialization time
-    - send(): accepts traditional GDB CLI (e.g., 'bt', 'break main') or MI ('-exec-continue')
-      Returns a dict: { "ok": bool, "records": list[dict], "error": Optional[str] }
-    - connect(force=False): connect to remote target via '-target-select remote 127.0.0.1:<port>'
-      * if already connected and force=False -> no-op
-      * if force=True -> detach if needed, then reconnect
-    - disconnect(): detach from remote target via '-target-detach'
+    Kernel-friendly GDB/MI wrapper for remote TCP debugging.
     """
 
-    def __init__(self, symbols_path: str, port: Union[int, str], *, logger: Optional[logging.Logger] = None) -> None:
+    def __init__(
+        self,
+        symbols_path: str,
+        port: Union[int, str],
+        *,
+        logger: Optional[logging.Logger] = None,
+    ) -> None:
         self.logger = logger or logging.getLogger(__name__)
         if not self.logger.handlers:
             self.logger.addHandler(logging.NullHandler())
@@ -29,91 +27,45 @@ class RemoteGdbMI:
         self.port = str(port)
         self.hostport = f"127.0.0.1:{self.port}"
         self._connected = False
+        self._state = "idle"
 
-        # Spawn GDB (MI2) using the built-in defaults
-        args = ["gdb", "--nx", "--quiet", "--interpreter=mi2"]
-        self.gdb = GdbController(command=args)
+        self.gdb = GdbController(
+            command=["gdb", "--nx", "--quiet", "--interpreter=mi2"])
 
         # Load symbols
-        # MI: -file-exec-and-symbols <path>
-        self._bootstrap_symbols()
+        res = self.set_file(self.symbols_path)
+        if not res["ok"]:
+            raise RuntimeError(
+                f"Failed to load symbols: {res['error'] or 'unknown error'}")
+        # Default settings
+        for mi in ("-gdb-set pagination off", "-gdb-set confirm off", "-gdb-set mi-async on"):
+            self._mi(mi, timeout_sec=2.0)
 
-        # Optional QoL gdb settings (MI form)
-        # Disable pagination, confirmations to avoid interactive prompts
-        self._safe_mi("gdb-set pagination off")
-        self._safe_mi("gdb-set confirm off")
+    # ---------- Primary API (unchanged) ----------
 
-    # ---------- Public API ----------
+    def send(self, cmd: str, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Execute CLI command."""
+        mi_cmd = f'-interpreter-exec console "{_escape_quotes(cmd)}"'
+        return self._mi(mi_cmd, timeout_sec)
 
-    def send(self, cmd: str, *, timeout_sec: float = 2.0) -> Dict:
-        """
-        Send a command to GDB.
-
-        If cmd starts with '-', treat as MI command (e.g., '-exec-continue').
-        Otherwise treat as traditional GDB CLI and tunnel via:
-            -interpreter-exec console "<cmd>"
-
-        Returns:
-            {
-              "ok": bool,
-              "records": List[dict],   # pygdbmi-parsed records
-              "error": Optional[str],
-            }
-        """
-        try:
-            if not cmd or not isinstance(cmd, str):
-                return {"ok": False, "records": [], "error": "invalid command"}
-
-            if cmd.lstrip().startswith("-"):
-                # MI directly
-                out = self.gdb.write(cmd, timeout_sec=timeout_sec)
-            else:
-                # Traditional CLI via MI
-                # NB: properly quote the command for -interpreter-exec console
-                tunneled = f'-interpreter-exec console "{_escape_quotes(cmd)}"'
-                out = self.gdb.write(tunneled, timeout_sec=timeout_sec)
-
-            ok, err = _evaluate_success(out)
-            return {"ok": ok, "records": out, "error": err}
-        except Exception as e:
-            self.logger.debug("send() error for cmd=%r: %s", cmd, e)
-            return {"ok": False, "records": [], "error": str(e)}
-
-    def connect(self, *, force: bool = False, timeout_sec: float = 3.0) -> Dict:
-        """
-        Connect to the pre-specified remote target (127.0.0.1:<port>).
-
-        - If already connected and force=False, it's a no-op and returns ok=True.
-        - If force=True, it will try to detach first (ignore errors), then reconnect.
-        """
+    def connect(self, force: bool = False, timeout_sec: float = 3.0) -> Dict[str, Any]:
+        """Connect to remote gdbserver at host:port."""
         if self._connected and not force:
             return {"ok": True, "records": [], "error": None}
-
         if force and self._connected:
-            try:
-                self.disconnect(timeout_sec=timeout_sec)
-            except Exception:
-                # ignore detach errors on force
-                pass
+            self.disconnect(timeout_sec=timeout_sec)
 
-        # MI: -target-select remote <host:port>
-        res = self.send(
-            f"-target-select remote {self.hostport}", timeout_sec=timeout_sec)
+        res = self._mi(
+            f"-target-select remote {self.hostport}", timeout_sec)
         if res["ok"]:
-            self._connected = True
+            self._connected, self._state = True, "stopped"
         else:
             self._connected = False
         return res
 
-    def disconnect(self, *, timeout_sec: float = 2.0) -> Dict:
-        """
-        Detach from the remote target.
-
-        Uses MI: -target-detach
-        """
-        res = self.send("-target-detach", timeout_sec=timeout_sec)
-        # Even if detach fails due to not connected, treat as disconnected afterwards
-        self._connected = False
+    def disconnect(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        res = self._mi("-target-detach", timeout_sec)
+        self._connected, self._state = False, "idle"
         return res
 
     @property
@@ -121,36 +73,74 @@ class RemoteGdbMI:
         return self._connected
 
     def close(self) -> None:
-        """Terminate GDB process."""
         try:
-            # Try to detach politely if connected
             if self._connected:
                 self.disconnect()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.error(f"Error disconnecting: {e}")
         try:
             self.gdb.exit()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.error(f"Error exiting gdb: {e}")
 
+    # ---------- Extra helpers ----------
+    # fmt: off
+    def continue_execution(self, *, timeout_sec: float = 2.0): return self._mi("-exec-continue", timeout_sec)
+    def finish(self, *, timeout_sec: float = 2.0): return self._mi("-exec-finish", timeout_sec)
+    def next(self, *, timeout_sec: float = 2.0): return self._mi("-exec-next", timeout_sec)
+    def step(self, *, timeout_sec: float = 2.0): return self._mi("-exec-step", timeout_sec)
+    def nexti(self, *, timeout_sec: float = 2.0): return self._mi("-exec-next-instruction", timeout_sec)
+    def stepi(self, *, timeout_sec: float = 2.0): return self._mi("-exec-step-instruction", timeout_sec)
+    def jump(self, locspec: str, *, timeout_sec: float = 2.0): return self._mi(f"-exec-jump {locspec}", timeout_sec)
+    def return_from_function(self, *, timeout_sec: float = 2.0): return self._mi("-exec-return", timeout_sec)
+    def until(self, locspec: Optional[str] = None, *, timeout_sec: float = 2.0):
+        return self._mi("-exec-until" if not locspec else f"-exec-until {locspec}", timeout_sec)
+
+    def set_breakpoint(self, location: str, condition: Optional[str] = None, *, timeout_sec: float = 2.0):
+        mi = f"-break-insert {location}" if not condition else f'-break-insert -c "{_escape_quotes(condition)}" {location}'
+        return self._mi(mi, timeout_sec)
+    def list_breakpoints(self, *, timeout_sec: float = 2.0): return self._mi("-break-list", timeout_sec)
+    def delete_breakpoint(self, number: int, *, timeout_sec: float = 2.0): return self._mi(f"-break-delete {number}", timeout_sec)
+    def enable_breakpoint(self, number: int, *, timeout_sec: float = 2.0): return self._mi(f"-break-enable {number}", timeout_sec)
+    def disable_breakpoint(self, number: int, *, timeout_sec: float = 2.0): return self._mi(f"-break-disable {number}", timeout_sec)
+
+    def evaluate_expression(self, expr: str, *, timeout_sec: float = 2.0):
+        return self._mi(f'-data-evaluate-expression "{_escape_quotes(expr)}"', timeout_sec)
+    def get_registers_mi(self, *, timeout_sec: float = 2.0): return self._mi("-data-list-register-values x", timeout_sec)
+    def get_backtrace_mi(self, *, timeout_sec: float = 2.0): return self._mi("-stack-list-frames", timeout_sec)
+    def get_disassembly_mi(self, length: int = 64, *, timeout_sec: float = 2.0):
+        return self._mi(f"-data-disassemble -s $pc -e $pc+{length} -- 1", timeout_sec)
+    def read_memory_mi(self, addr: str, fmt: str, size: int, rows: int, cols: int, *, timeout_sec: float = 2.0):
+        return self._mi(f"-data-read-memory {addr} {fmt} {size} {rows} {cols}", timeout_sec)
+    def read_memory_bytes(self, addr: str, n: int, *, timeout_sec: float = 2.0):
+        return self._mi(f"-data-read-memory-bytes {addr} {n}", timeout_sec)
+    def set_file(self, filepath: str, *, timeout_sec: float = 5.0):
+        return self._mi(f"-file-exec-and-symbols {filepath}", timeout_sec)
+    # fmt: on
     # ---------- Internals ----------
 
-    def _bootstrap_symbols(self) -> None:
-        res = self.send(
-            f"-file-exec-and-symbols {self.symbols_path}", timeout_sec=5.0)
-        if not res["ok"]:
-            # Surface a clear error early
-            raise RuntimeError(
-                f"Failed to load symbols: {res['error'] or 'unknown error'}")
-
-    def _safe_mi(self, mi_cmd: str) -> None:
-        """Fire-and-forget MI settings; swallow errors."""
+    def _mi(self, mi_cmd: str, timeout_sec: float) -> Dict[str, Any]:
+        """Core send wrapper with logging + state tracking."""
         try:
-            if not mi_cmd.startswith("-"):
-                mi_cmd = f"-{mi_cmd}"
-            self.gdb.write(mi_cmd, timeout_sec=1.0)
-        except Exception:
-            pass
+            out = self.gdb.write(mi_cmd, timeout_sec=timeout_sec)
+            self._ingest_state(out)
+            ok, err = _evaluate_success(out)
+            self.logger.debug(
+                "cmd=%r, ok=%s, error=%s, records=%s", mi_cmd, ok, err, out)
+            return {"ok": ok, "records": out, "error": err}
+        except Exception as e:
+            self.logger.error("_mi() error for %r: %s", mi_cmd, e)
+            return {"ok": False, "records": [], "error": str(e)}
+
+    def _ingest_state(self, records: List[Dict[str, Any]]) -> None:
+        for r in records or []:
+            if r.get("type") == "notify":
+                if r.get("message") == "running":
+                    self._state = "running"
+                elif r["message"] == "stopped":
+                    self._state = "stopped"
+                elif r["message"] == "thread-group-exited":
+                    self._state = "exited"
 
     def __del__(self) -> None:
         try:
@@ -161,43 +151,23 @@ class RemoteGdbMI:
 
 # ---------- Helpers ----------
 
-def _evaluate_success(records: List[Dict]) -> tuple[bool, Optional[str]]:
-    """
-    Heuristic success detection:
-    - If we saw any 'result' record with message in {'done', 'connected'} => success
-    - If any 'result' record with message == 'error' => failure with msg
-    - Else: if any async 'stopped' etc. w/o error -> still consider ok (many CLI cmds produce stream only)
-    """
-    ok = False
-    err = None
-    saw_any = False
-
+def _evaluate_success(records: List[Dict]) -> Tuple[bool, Optional[str]]:
+    ok, err, saw_result, saw_notify = False, None, False, False
     for r in records or []:
-        rtype = r.get("type")
-        msg = r.get("message")
-        payload = r.get("payload")
-
-        if rtype == "result":
-            saw_any = True
-            if msg in ("done", "connected"):
+        t, msg, payload = r.get("type"), r.get("message"), r.get("payload")
+        if t == "result":
+            saw_result = True
+            if msg in {"done", "connected", "running"}:
                 ok = True
             elif msg == "error":
-                ok = False
-                # payload can be a string or dict with 'msg'
-                if isinstance(payload, dict):
-                    err = payload.get("msg") or str(payload)
-                else:
-                    err = str(payload) if payload is not None else "error"
-                # keep scanning to gather more context, but error dominates
-        # Streams ('~','@','&') and async ('*','=')
-        # don't flip ok to True unless we saw a positive 'result', but we keep them for context.
-
-    # If there was no explicit result record, treat as ok (console-only output is common)
-    if not saw_any:
-        ok = True
+                err = payload.get("msg") if isinstance(
+                    payload, dict) else str(payload or "error")
+        elif t == "notify" and msg in {"running", "stopped"}:
+            saw_notify = True
+    if not saw_result:
+        ok = True if saw_notify or not records else ok
     return ok, err
 
 
 def _escape_quotes(s: str) -> str:
-    # Escape embedded double quotes for -interpreter-exec console "..."
-    return s.replace('\\', '\\\\').replace('"', r'\"')
+    return s.replace("\\", "\\\\").replace('"', r'\"')

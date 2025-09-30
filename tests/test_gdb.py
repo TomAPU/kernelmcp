@@ -42,7 +42,7 @@ def hello_exe(tmp_path: Path):
     if not cc:
         pytest.skip("No C compiler (gcc/clang) found in PATH.")
 
-    res = subprocess.run([cc, str(src), "-o", str(exe)],
+    res = subprocess.run([cc, str(src), "-g", "-O0", "-o", str(exe)],
                          capture_output=True, text=True)
     if res.returncode != 0:
         pytest.skip(f"Failed to compile test binary: {res.stderr[:400]}")
@@ -66,84 +66,101 @@ def gdbserver(hello_exe):
     yield hello_exe, port
 
     proc.terminate()
-    proc.wait(timeout=2)
+    try:
+        proc.wait(timeout=2)
+    except Exception:
+        proc.kill()
+
+
+def _notify_stops(records):
+    """Extract MI notify 'stopped' records (list of dict)."""
+    return [r for r in (records or []) if r.get("type") == "notify" and r.get("message") == "stopped"]
+
+
+def _stop_reasons(stopped_records):
+    """Collect 'reason' fields from stopped notify payloads."""
+    reasons = []
+    for r in stopped_records:
+        payload = r.get("payload")
+        if isinstance(payload, dict):
+            rsn = payload.get("reason")
+            if rsn:
+                reasons.append(rsn)
+    return reasons
 
 
 def test_gdbserver_connect(gdbserver):
     exe, port = gdbserver
     gdb = RemoteGdbMI(exe, port)
 
-    res = gdb.connect(timeout_sec=5.0)
-    assert isinstance(res, dict)
+    try:
+        res = gdb.connect(timeout_sec=5.0)
+        assert isinstance(res, dict)
+        if res.get("ok"):
+            assert gdb.is_connected
+            # After remote connect, target should be stopped; backtrace should work.
+            bt = gdb.get_backtrace_mi(timeout_sec=5.0)
+            assert isinstance(bt, dict)
+            assert bt.get("ok"), f"backtrace failed: {bt.get('error')}"
+        else:
+            assert res.get("error") is not None
+    finally:
+        gdb.close()
 
-    if res.get("ok"):
-        assert gdb.is_connected
-        out = gdb.send("info threads", timeout_sec=5.0)
-        assert isinstance(out, dict)
-    else:
-        assert res.get("error") is not None
 
-    gdb.close()
-
-
-def test_gdb_break_and_print(gdbserver):
-    """Real integration: set breakpoint at main, continue, evaluate expression, then run to completion."""
+def test_gdb_break_and_eval_then_exit(gdbserver):
+    """Integration: break at main -> continue -> MI evaluate -> continue to program exit."""
     exe, port = gdbserver
     gdb = RemoteGdbMI(exe, port)
+
     try:
         # Connect
         cres = gdb.connect(timeout_sec=5.0)
         assert cres.get("ok"), f"connect failed: {cres.get('error')}"
 
-        def _console_text(records):
-            # pygdbmi uses type 'console' for CLI output records (not 'output').
-            collected = []
-            for r in records:
-                rtype = r.get("type")
-                if rtype in ("console", "output"):
-                    payload = r.get("payload")
-                    if isinstance(payload, str):
-                        collected.append(payload)
-            return "\n".join(collected)
+        # Set a breakpoint at main (MI)
+        bres = gdb.set_breakpoint("main", timeout_sec=5.0)
+        assert bres["ok"], f"break main failed: {bres.get('error')}"
 
-        # Break main
-        bres = gdb.send("break main", timeout_sec=5.0)
-        assert bres["ok"]
-        bt = _console_text(bres["records"]).lower()
-        assert "break" in bt or "breakpoint" in bt, f"Unexpected breakpoint output: {bt!r}"
+        # Continue; expect to stop at the breakpoint
+        cont1 = gdb.continue_execution(timeout_sec=5.0)
+        assert cont1["ok"], f"continue failed: {cont1.get('error')}"
+        stops = _notify_stops(cont1["records"])
+        # Some GDBs may not flush notify immediately; poke once to flush.
+        if not stops:
+            flush = gdb.get_backtrace_mi(timeout_sec=2.0)
+            stops = _notify_stops(flush["records"])
+        assert stops, "No 'stopped' notification after continue to breakpoint"
+        reasons = _stop_reasons(stops)
+        # Accept either 'breakpoint-hit' or a generic 'stopped' without reason (toolchains vary)
+        assert ("breakpoint-hit" in reasons) or (len(reasons) ==
+                                                 0), f"Unexpected stop reasons at main: {reasons}"
 
-        # Continue (hit breakpoint at main)
-        cont1 = gdb.send("-exec-continue", timeout_sec=5.0)
-        # Expect a 'stopped' notification in records
-        stopped_msgs = [r for r in cont1["records"]
-                        if r.get("message") == "stopped"]
-        assert stopped_msgs, "Did not observe stopped notification after first continue"
+        # Evaluate an expression using MI (no CLI parsing)
+        pres = gdb.evaluate_expression("3+4", timeout_sec=3.0)
+        assert pres["ok"], f"evaluate failed: {pres.get('error')}"
+        # Find the 'result' record with value
+        value = None
+        for r in pres["records"]:
+            if r.get("type") == "result" and r.get("message") == "done":
+                payload = r.get("payload")
+                if isinstance(payload, dict) and "value" in payload:
+                    value = payload["value"]
+                    break
+        assert value is not None, f"MI did not return a value: {pres['records']}"
+        assert value.strip() in ("7", "0x7"), f"Expected 7, got {value!r}"
 
-        # Evaluate an expression (should get $N = 7) via CLI tunneled print
-        pres = gdb.send("print 3+4", timeout_sec=3.0)
-        assert pres["ok"], f"print failed: {pres.get('error')}"
-        ptxt = _console_text(pres["records"]).lower()
-        assert "7" in ptxt, f"Expected '7' in print output, got: {ptxt!r}"
-
-        # Continue to program end; verify final stop reason is program exit (exited / exited-normally)
-        cont2 = gdb.send("-exec-continue", timeout_sec=5.0)
-        final_stops = [r for r in cont2["records"]
-                       if r.get("message") == "stopped"]
-        # If no stop yet, issue a no-op to flush pending async notifications
+        # Continue to program end; expect exited/exited-normally
+        cont2 = gdb.continue_execution(timeout_sec=5.0)
+        assert cont2["ok"], f"final continue failed: {cont2.get('error')}"
+        final_stops = _notify_stops(cont2["records"])
         if not final_stops:
-            flush = gdb.send("info threads", timeout_sec=2.0)
-            final_stops = [r for r in flush["records"]
-                           if r.get("message") == "stopped"]
-        assert final_stops, "No final stopped record observed after program run"
-        # Inspect reasons
-        reasons = []
-        for r in final_stops:
-            payload = r.get("payload")
-            if isinstance(payload, dict):
-                reason = payload.get("reason")
-                if reason:
-                    reasons.append(reason)
-        assert any(rsn in ("exited-normally", "exited")
-                   for rsn in reasons), f"Unexpected stop reasons: {reasons}"
+            # Nudge GDB to deliver pending notifications
+            flush = gdb.get_backtrace_mi(timeout_sec=2.0)
+            final_stops = _notify_stops(flush["records"])
+        assert final_stops, "No final 'stopped' record observed after program run"
+        final_reasons = _stop_reasons(final_stops)
+        assert any(r in ("exited-normally", "exited")
+                   for r in final_reasons), f"Unexpected final reasons: {final_reasons}"
     finally:
         gdb.close()
