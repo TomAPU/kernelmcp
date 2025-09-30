@@ -48,13 +48,10 @@ class RemoteGdbMI:
         mi_cmd = f'-interpreter-exec console "{_escape_quotes(cmd)}"'
         return self._mi(mi_cmd, timeout_sec)
 
-    def connect(self, force: bool = False, timeout_sec: float = 3.0) -> Dict[str, Any]:
+    def connect(self, timeout_sec: float = 3.0) -> Dict[str, Any]:
         """Connect to remote gdbserver at host:port."""
-        if self._connected and not force:
-            return {"ok": True, "records": [], "error": None}
-        if force and self._connected:
-            self.disconnect(timeout_sec=timeout_sec)
-
+        if self._connected:
+            raise RuntimeError("Already connected")
         res = self._mi(
             f"-target-select remote {self.hostport}", timeout_sec)
         if res["ok"]:
@@ -91,7 +88,6 @@ class RemoteGdbMI:
     def step(self, *, timeout_sec: float = 2.0): return self._mi("-exec-step", timeout_sec)
     def nexti(self, *, timeout_sec: float = 2.0): return self._mi("-exec-next-instruction", timeout_sec)
     def stepi(self, *, timeout_sec: float = 2.0): return self._mi("-exec-step-instruction", timeout_sec)
-    def jump(self, locspec: str, *, timeout_sec: float = 2.0): return self._mi(f"-exec-jump {locspec}", timeout_sec)
     def return_from_function(self, *, timeout_sec: float = 2.0): return self._mi("-exec-return", timeout_sec)
     def until(self, locspec: Optional[str] = None, *, timeout_sec: float = 2.0):
         return self._mi("-exec-until" if not locspec else f"-exec-until {locspec}", timeout_sec)
