@@ -56,7 +56,7 @@ RUN apt-get update && \
     libncurses-dev libncurses5-dev libncursesw5-dev \
     bison flex libelf-dev bc gdb \
     debootstrap cmake wget libmpfr-dev libdw-dev \
-    qemu-system-x86 qemu-utils qemu-kvm \
+    qemu-system-x86 qemu-utils qemu-kvm qemu-system-aarch64 scp openssh-client \
     libvirt-daemon-system libvirt-clients bridge-utils \
     jq unzip cscope codequery universal-ctags ripgrep \
     gdbserver \
