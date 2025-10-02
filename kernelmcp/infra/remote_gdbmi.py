@@ -14,7 +14,7 @@ class RemoteGdbMI:
 
     def __init__(
         self,
-        symbols_path: str,
+        binary_path: str,
         port: Union[int, str],
         *,
         logger: Optional[logging.Logger] = None,
@@ -23,7 +23,7 @@ class RemoteGdbMI:
         if not self.logger.handlers:
             self.logger.addHandler(logging.NullHandler())
 
-        self.symbols_path = symbols_path
+        self.binary_path = binary_path
         self.port = str(port)
         self.hostport = f"127.0.0.1:{self.port}"
         self._connected = False
@@ -33,7 +33,7 @@ class RemoteGdbMI:
             command=["gdb", "--nx", "--quiet", "--interpreter=mi2"])
 
         # Load symbols
-        res = self.set_file(self.symbols_path)
+        res = self.set_file(self.binary_path)
         if not res["ok"]:
             raise RuntimeError(
                 f"Failed to load symbols: {res['error'] or 'unknown error'}")
