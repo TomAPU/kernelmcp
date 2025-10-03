@@ -166,8 +166,10 @@ class VMManage:
                 "VM did not reach prompt within %ds", timeout_sec)
         else:
             self.logger.debug("VM reached prompt: %s", self.prompt)
-        # execute bind 'set enable-bracketed-paste off'
+        # Execute bind 'set enable-bracketed-paste off'
         self.exec_cmd("bind 'set enable-bracketed-paste off'")
+        # Execute stty -echo to disable local echoing of input characters
+        self.exec_cmd("stty -echo")
         return ok
 
     def stop_vm(self) -> None:
@@ -211,16 +213,10 @@ class VMManage:
 
         child = self._child
         assert child is not None
-
-        # Send the command and capture output until prompt shows again
+        # Drain the pending output to avoid logging the command into output
+        self._drain_output()
         try:
-            # Send the command without sending newline
-            child.send(cmd)
-            # Drain the pending output to avoid logging the command into output
-            self._drain_output()
-            # Finally, send newline to execute
-            child.send("\r")
-
+            child.sendline(cmd)
         except Exception as e:
             return {"success": False, "reason": f"send failed: {e}", "output": ""}
 
