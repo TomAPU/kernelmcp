@@ -1,11 +1,19 @@
 import subprocess
+import os
+import socket
+import shutil
 from pathlib import Path
-
 import pytest
 
 from kernelmcp.infra.utils import run_cmd
 from kernelmcp.infra.utils import get_unused_port
-import socket
+from kernelmcp.infra.utils import compile_c_code
+
+
+@pytest.fixture(scope="module", autouse=False)
+def require_gcc():
+    if shutil.which("gcc") is None:
+        pytest.skip("gcc not installed")
 
 
 def test_run_cmd_success(monkeypatch, tmp_path: Path):
@@ -55,3 +63,53 @@ def test_get_unused_port():
         s.bind(("127.0.0.1", port))
     finally:
         s.close()
+
+
+def test_compile_c_code_success(require_gcc):
+    code = r"""
+    #include <stdio.h>
+    int main() {
+        printf("ok\n");
+        return 0;
+    }
+    """
+    res = compile_c_code(logger=None, code=code)
+    assert res["success"] is True
+    bin_path = Path(res["binary_path"])
+    assert bin_path.exists()
+    # run binary
+    output = subprocess.check_output([str(bin_path)], text=True).strip()
+    assert output == "ok"
+    # cleanup
+    os.remove(bin_path)
+
+
+def test_compile_c_code_with_flags(require_gcc):
+    code = r"""
+    #include <stdio.h>
+    int main() {
+        puts("flag");
+        return 0;
+    }
+    """
+    res = compile_c_code(logger=None, code=code, flags=["-O2"])
+    assert res["success"] is True
+    bin_path = Path(res["binary_path"])
+    assert bin_path.exists()
+    # run binary
+    output = subprocess.check_output([str(bin_path)], text=True).strip()
+    assert output == "flag"
+    # cleanup
+    os.remove(bin_path)
+
+
+def test_compile_c_code_failure(require_gcc):
+    # broken code, missing semicolon
+    code = r"""
+    int main() {
+        return 0
+    """
+    res = compile_c_code(logger=None, code=code)
+    assert res["success"] is False
+    assert res["binary_path"] is None
+    assert "error" in res["reason"].lower()

@@ -1,4 +1,6 @@
 from __future__ import annotations
+import uuid
+import os
 import subprocess
 import time
 import logging
@@ -65,3 +67,45 @@ def get_unused_port(host: str = "127.0.0.1") -> int:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((host, 0))
         return s.getsockname()[1]
+
+
+def compile_c_code(
+    logger: Optional[logging.Logger],
+    code: str,
+    flags: Optional[List[str]] = None,
+) -> dict:
+    """
+    Compile given C code into a binary using gcc.
+
+    - Creates a random subdir under /tmp.
+    - Writes code into 'prog.c'.
+    - Invokes gcc with optional `flags`.
+    - Deletes the .c file after compilation, leaving only the binary.
+    - Returns dict with {"success": bool, "binary_path": str|None, "reason": str}.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+        logger.addHandler(logging.NullHandler())
+
+    flags = flags or []
+    tmpdir = Path("/tmp") / f"prog_{uuid.uuid4().hex}"
+    tmpdir.mkdir(parents=True, exist_ok=False)
+    src = tmpdir / "prog.c"
+    out = tmpdir / "prog.bin"
+
+    try:
+        src.write_text(code, encoding="utf-8")
+        cmd = ["gcc", str(src), "-o", str(out)] + flags
+        try:
+            run_cmd(cmd, logger=logger, cwd=tmpdir)
+        except RuntimeError as e:
+            return {"success": False, "binary_path": None, "reason": str(e)}
+        finally:
+            try:
+                os.remove(src)
+            except FileNotFoundError:
+                pass
+
+        return {"success": True, "binary_path": str(out), "reason": ""}
+    except Exception as e:
+        return {"success": False, "binary_path": None, "reason": str(e)}
