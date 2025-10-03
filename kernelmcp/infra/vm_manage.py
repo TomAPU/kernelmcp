@@ -39,6 +39,7 @@ class VMManage:
     API:
       - start_vm(timeout_sec: int = 20) -> bool
       - stop_vm() -> None
+      - is_running() -> bool
       - restart_vm(timeout_sec: int = 20) -> bool
       - exec_cmd(cmd: str, timeout_sec: int = 20) -> Dict[str, Any]
       - upload_file(host_path: str, vm_path: str, timeout: Optional[int] = None) -> Dict[str, Any]
@@ -82,8 +83,6 @@ class VMManage:
         self._prompt_re = re.compile(re.escape(self.prompt))
 
     # ---------- helpers ----------
-    def _is_running(self) -> bool:
-        return self._child is not None and self._child.isalive()
 
     def _spawn_ezqm(self) -> None:
         """Spawn ezqm in project_dir and set up logging."""
@@ -102,7 +101,7 @@ class VMManage:
 
     def _wait_for_prompt(self, timeout_sec: int) -> bool:
         """Pump newlines and wait until prompt appears or timeout."""
-        if not self._is_running():
+        if not self.is_running():
             return False
 
         child = self._child
@@ -138,7 +137,7 @@ class VMManage:
 
     def _drain_output(self):
         """Drain any pending output from the child to avoid mixing old text."""
-        if not self._is_running():
+        if not self.is_running():
             return
         child = self._child
         assert child is not None
@@ -151,10 +150,12 @@ class VMManage:
             pass
 
     # ---------- public API ----------
+    def is_running(self) -> bool:
+        return self._child is not None and self._child.isalive()
 
     def start_vm(self, timeout_sec: int = 20) -> bool:
         """Start ezqm, keep the process, and wait for shell prompt."""
-        if self._is_running():
+        if self.is_running():
             self.logger.debug("VM already running; start_vm() is a no-op.")
             return True
 
@@ -179,7 +180,7 @@ class VMManage:
 
     def stop_vm(self) -> None:
         """Terminate the running ezqm process if alive."""
-        if not self._is_running():
+        if not self.is_running():
             self.logger.debug("stop_vm(): VM is not running; nothing to do.")
             self._child = None
             return
@@ -209,7 +210,7 @@ class VMManage:
         On timeout:
           {"success": False, "reason": "Timeout", "output": "<partial text>"}
         """
-        if not self._is_running():
+        if not self.is_running():
             return {
                 "success": False,
                 "reason": "The virtual machine is not started",
