@@ -61,8 +61,8 @@ class VMManage:
 
         self.project_dir: Path = Path(ezqmlocalfolder).resolve()
         self.logger = logger or logging.getLogger(__name__)
-        self.start_marker = "__EZQM_CMD_START__"
-        self.stop_marker = "__EZQM_CMD_END__"
+        self.START_MARKER = "__EZQM_CMD_START__"
+        self.STOP_MARKER = "__EZQM_CMD_END__"
         if not self.logger.handlers:
             self.logger.addHandler(logging.NullHandler())
 
@@ -223,16 +223,16 @@ class VMManage:
         try:
             # Execute the command prefixed by an echo of a unique marker
             child.sendline(
-                f"echo {self.start_marker};{cmd}; echo {self.stop_marker}")
+                f"echo {self.START_MARKER};{cmd}; echo {self.STOP_MARKER}")
         except Exception as e:
             return {"success": False, "reason": f"send failed: {e}", "output": ""}
 
         try:
-            child.expect(self.stop_marker, timeout=timeout_sec)
+            child.expect(self.STOP_MARKER, timeout=timeout_sec)
             # child.before includes the command echo and command output; strip the echo line if present
             out = child.before or ""
             # Trim self.start_marker line if present without using regex
-            out = out.split(self.start_marker, 1)[-1].lstrip("\r\n")
+            out = out.split(self.START_MARKER, 1)[-1].lstrip("\r\n")
             # Normalize: remove a leading echoed command line if it matches
             lines = out.splitlines()
             if lines and lines[0].strip() == cmd.strip():
