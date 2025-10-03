@@ -59,6 +59,8 @@ class VMManage:
         self.prompt: str = promptstr
         self.project_dir: Path = Path(ezqmlocalfolder).resolve()
         self.logger = logger or logging.getLogger(__name__)
+        self.start_marker = "__EZQM_CMD_START__"
+        self.stop_marker = "__EZQM_CMD_END__"
         if not self.logger.handlers:
             self.logger.addHandler(logging.NullHandler())
 
@@ -166,10 +168,15 @@ class VMManage:
                 "VM did not reach prompt within %ds", timeout_sec)
         else:
             self.logger.debug("VM reached prompt: %s", self.prompt)
-        # Execute bind 'set enable-bracketed-paste off'
-        self.exec_cmd("bind 'set enable-bracketed-paste off'")
+        # These two executions should not be used with self.exec_cmd()
+        # Execute bind 'set enable-bracketed-paste off' to avoid ANSI strange characters
+        self._child.sendline("bind 'set enable-bracketed-paste off'")
         # Execute stty -echo to disable local echoing of input characters
-        self.exec_cmd("stty -echo")
+        self._child.sendline("stty -echo")
+        # Sleep 3 second
+        time.sleep(3)
+        # Drain any pending output
+        self._drain_output()
         return ok
 
     def stop_vm(self) -> None:
@@ -216,14 +223,18 @@ class VMManage:
         # Drain the pending output to avoid logging the command into output
         self._drain_output()
         try:
-            child.sendline(cmd)
+            # Execute the command prefixed by an echo of a unique marker
+            child.sendline(
+                f"echo {self.start_marker};{cmd}; echo {self.stop_marker}")
         except Exception as e:
             return {"success": False, "reason": f"send failed: {e}", "output": ""}
 
         try:
-            child.expect(self._prompt_re, timeout=timeout_sec)
+            child.expect(self.stop_marker, timeout=timeout_sec)
             # child.before includes the command echo and command output; strip the echo line if present
             out = child.before or ""
+            # Trim self.start_marker line if present without using regex
+            out = out.split(self.start_marker, 1)[-1].lstrip("\r\n")
             # Normalize: remove a leading echoed command line if it matches
             lines = out.splitlines()
             if lines and lines[0].strip() == cmd.strip():

@@ -44,12 +44,12 @@ def test_vm_lifecycle_and_exec(ezqm_localfolder, tmp_path, vm_logger):
     try:
         # Run a simple command
         t0 = time.time()
-        cmd = "echo hello"
+        cmd = 'echo -n "hello" | base64'
         vm_logger.info("exec_cmd: %r (timeout=10s)", cmd)
         res = vm.exec_cmd(cmd, timeout_sec=10)
         vm_logger.debug("exec_cmd result: %r (%.2fs)", res, time.time() - t0)
         assert res["success"], f"exec_cmd failed: {res}"
-        assert "hello" in res["output"]
+        assert "aGVsbG8=" == res["output"]
 
         # Upload a test file
         testfile = tmp_path / "hello.txt"
@@ -64,7 +64,7 @@ def test_vm_lifecycle_and_exec(ezqm_localfolder, tmp_path, vm_logger):
         vm_logger.info("Verifying uploaded file content ...")
         chk = vm.exec_cmd("cat /root/hello.txt", timeout_sec=10)
         vm_logger.debug("cat result: %r (%.2fs)", chk, time.time() - t0)
-        assert chk["success"] and "hi from host" in chk["output"]
+        assert chk["success"] and "hi from host" == chk["output"]
 
     finally:
         vm_logger.info("Stopping VM ...")
