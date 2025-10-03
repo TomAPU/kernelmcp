@@ -4,18 +4,19 @@ from kernelmcp.plugins import McpPlugin, mcp_tool
 from kernelmcp.infra import SourceView
 from functools import wraps
 
+
 def ensure_sv():
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             self = args[0]
             if not hasattr(self, 'sv') or self.sv is None:
-                raise RuntimeError(f"{self.NAME} plugin not properly initialized with SourceView. Please check 'code_path' in config.")
+                raise RuntimeError(
+                    f"{self.NAME} plugin not properly initialized with SourceView. Please check 'code_path' in config.")
             result = func(*args, **kwargs)
             return result
         return wrapper
     return decorator
-
 
 
 class SourceViewPlugin(McpPlugin):
@@ -40,8 +41,10 @@ class SourceViewPlugin(McpPlugin):
         """
         Retrieve source code from a file between start and end lines (1-based, inclusive).
         The returned "code" field includes line numbers.
+        This functionality is for code browsing.
         """
-        ret = self.sv.get_source(source_path, start=start, end=end, include_linenos=True)
+        ret = self.sv.get_source(
+            source_path, start=start, end=end, include_linenos=True)
         del ret['lines']  # remove detailed lines list to save space
         return ret
 
@@ -49,7 +52,7 @@ class SourceViewPlugin(McpPlugin):
     @ensure_sv()
     def get_source_folder(self) -> str:
         """
-        Return the root of the source code folder path.
+        Return the root of the source code folder path to help code browsing.
         """
         return self.code_path
 
@@ -57,11 +60,12 @@ class SourceViewPlugin(McpPlugin):
     @ensure_sv()
     def search(self, pattern: str, regex: bool, root_dir: Optional[str] = None) -> List[Dict]:
         """
-        Search for a text pattern in the source code.
+        Search for a text pattern in the kernel source code.
         Returns file path, line number, and the matching line.
         If `root_dir` is None, searches from the root of the source code folder.
         If `regex` is False, performs a literal search. 
         If `regex` is True, treats `pattern` as a regex.
+        This tool is intended for code browsing.
         """
         try:
             return self.sv.search(root_dir, pattern, regex=regex, ignore_case=False, max_results=100)
@@ -73,8 +77,10 @@ class SourceViewPlugin(McpPlugin):
     @ensure_sv()
     def list_files(self, rel_dir: str = ".") -> List[Dict]:
         """
-        List files under a directory (relative to source root).
+        List files under a directory (relative to source root) in the *host machine* (NOT the virtual machine).
         Shows file path and size in bytes.
+        This tool is intended for code browsing.
+        For instance, if you pass "net/nfc/nci", it will give data.c, hci.c, etc. in that directory.
         """
         try:
             return self.sv.list_files(rel_dir, pattern=None, recursive=False)

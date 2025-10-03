@@ -5,6 +5,7 @@ from functools import wraps
 
 from kernelmcp.plugins import McpPlugin, mcp_tool
 from kernelmcp.infra.vm_manage import VMManage
+from kernelmcp.infra.utils import compile_c_code
 
 
 def ensure_vm():
@@ -90,7 +91,7 @@ class VMInteractPlugin(McpPlugin):
     @ensure_vm()
     def start_vm(self, timeout_sec: int = 20) -> Dict[str, Any]:
         """
-        Start the VM
+        Start the virtual machine
         """
         return {"success": self.vm.start_vm(timeout_sec=timeout_sec)}
 
@@ -98,7 +99,7 @@ class VMInteractPlugin(McpPlugin):
     @ensure_vm()
     def restart_vm(self, timeout_sec: int = 20) -> Dict[str, Any]:
         """
-        Restart the VM. Use when the VM is halted or unresponsive.
+        Restart the virtual machine. Use when the virtual machine is halted or unresponsive.
         """
         return {"success": self.vm.restart_vm(timeout_sec=timeout_sec)}
 
@@ -106,7 +107,8 @@ class VMInteractPlugin(McpPlugin):
     @ensure_vm()
     def exec_cmd(self, cmd: str, timeout_sec: int = 20) -> Dict[str, Any]:
         """
-        Execute a command in the VM and return its output.
+        Execute a command in the virtual machine and return its output.
+        Use this tool only when the virtual machine is running.
 
         On success:
           {"success": True, "reason": "", "output": "<captured text>"}
@@ -121,17 +123,24 @@ class VMInteractPlugin(McpPlugin):
     @ensure_vm()
     def compile_c_and_upload(self, code: str, dest_path: str, flags: Optional[list[str]] = None) -> Dict[str, Any]:
         """
-        Compile given C code into a binary using gcc, then upload it to the VM.
+        Compile given C code into a binary using gcc, then upload it to the virtual machine.
+        Use this tool only when the virtual machine is running.
         - Creates a random subdir under /tmp.
         - Writes code into 'prog.c'.
         - Invokes gcc with optional `flags` (by default ["-static"]).
-        - Uploads the binary to `dest_path` in the VM.
+        - Uploads the binary to `dest_path` in the virtual machine.
         - Returns dict with {"success": bool, "reason": str}.
         """
-        from kernelmcp.infra.utils import compile_c_code
 
         if not flags:
             flags = ["-static"]
+
+        if not self.vm.is_running():
+            return {
+                "success": False,
+                "reason": "The virtual machine is not started",
+            }
+
         res = compile_c_code(self.logger, code, flags=flags)
         if not res["success"]:
             return {"success": False, "reason": f"Compilation failed: {res['reason']}"}

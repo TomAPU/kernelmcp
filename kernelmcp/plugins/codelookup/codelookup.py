@@ -3,13 +3,15 @@ from kernelmcp.infra import CodeQuerySearch
 from typing import List, Dict, Any, Callable
 from functools import wraps
 
+
 def ensure_db():
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             self = args[0]
             if not hasattr(self, 'db') or self.db is None:
-                raise RuntimeError(f"{self.NAME} plugin not properly initialized with CodeQuerySearch. Please check 'db_path' in config.")
+                raise RuntimeError(
+                    f"{self.NAME} plugin not properly initialized with CodeQuerySearch. Please check 'db_path' in config.")
             return func(*args, **kwargs)
         return wrapper
     return decorator
@@ -37,6 +39,7 @@ class CodeLookup(McpPlugin):
     def get_definition(self, symbol: str) -> List[Dict]:
         """
         Get the definition of a symbol from the code database.
+        This can be used to query functions, structs, macros, variables, etc.
         """
         return self.db.get_definition(symbol)
 
@@ -46,7 +49,8 @@ class CodeLookup(McpPlugin):
     def get_reference(self, symbol: str) -> List[Dict]:
         """
         Get the references of a symbol from the code database.
-        """     
+        This can be used to query functions, structs, macros, variables, etc.
+        """
         return self.db.get_reference(symbol)
 
     @mcp_tool
@@ -55,5 +59,6 @@ class CodeLookup(McpPlugin):
     def get_function_range(self, symbol: str) -> List[Dict]:
         """
         Get the filename and line range of a function definition from the code database.
+        This can be used be comnbined with the get_source tool to retrieve the function's source code.
         """
         return self.db.get_function_range(symbol)
