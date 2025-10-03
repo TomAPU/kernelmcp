@@ -37,7 +37,6 @@ class VMManage:
     """Lightweight wrapper for running/controlling ezqm-based VMs.
 
     API:
-      - gdb_port() -> int
       - start_vm(timeout_sec: int = 20) -> bool
       - stop_vm() -> None
       - restart_vm(timeout_sec: int = 20) -> bool
@@ -52,11 +51,14 @@ class VMManage:
 
     def __init__(
         self,
-        promptstr: str = "root@syzkaller",
+        promptstr: str = "",
         ezqmlocalfolder: str = ".",
         logger: Optional[logging.Logger] = None,
     ):
         self.prompt: str = promptstr
+        if not self.prompt:
+            self.prompt = "root@syzkaller"
+
         self.project_dir: Path = Path(ezqmlocalfolder).resolve()
         self.logger = logger or logging.getLogger(__name__)
         self.start_marker = "__EZQM_CMD_START__"
@@ -149,10 +151,6 @@ class VMManage:
             pass
 
     # ---------- public API ----------
-
-    def gdb_port(self) -> int:
-        """Return gdbport from localconf."""
-        return int(self.localconf.get("gdbport"))
 
     def start_vm(self, timeout_sec: int = 20) -> bool:
         """Start ezqm, keep the process, and wait for shell prompt."""
