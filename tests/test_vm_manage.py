@@ -85,3 +85,63 @@ def test_vm_restart(ezqm_localfolder, vm_logger):
 
     vm_logger.info("Stopping VM after restart test")
     vm.stop_vm()
+
+
+def test_vm_exec_timeout_recovery(ezqm_localfolder, vm_logger):
+    """Ensure VM can recover from a command timeout and still execute subsequent commands."""
+    vm_logger.info("Creating VMManage instance for timeout recovery test")
+    vm = VMManage(ezqmlocalfolder=ezqm_localfolder, logger=vm_logger)
+
+    vm_logger.info("Starting VM (timeout=20s)")
+    assert vm.start_vm(timeout_sec=20), "start_vm failed"
+
+    try:
+        # Step 1: run a long command with short timeout -> expect failure
+        cmd = "sleep 100"
+        vm_logger.info("exec_cmd: %r (timeout=5s)", cmd)
+        res = vm.exec_cmd(cmd, timeout_sec=5)
+        vm_logger.debug("exec_cmd result (expected timeout): %r", res)
+        assert not res["success"], "Command unexpectedly succeeded, should have timed out"
+
+        # Step 2: run a normal command to verify VM is still responsive
+        cmd2 = 'echo -n "hello" | base64'
+        vm_logger.info("exec_cmd after timeout: %r (timeout=10s)", cmd2)
+        res2 = vm.exec_cmd(cmd2, timeout_sec=10)
+        vm_logger.debug("exec_cmd result after timeout: %r", res2)
+        assert res2["success"], f"exec_cmd failed after timeout: {res2}"
+        assert res2["output"] == "aGVsbG8=", f"Unexpected output: {res2['output']}"
+
+    finally:
+        vm_logger.info("Stopping VM after timeout recovery test")
+        vm.stop_vm()
+        vm_logger.info("VM stopped")
+
+
+def test_vm_exec_bad_command_recovery(ezqm_localfolder, vm_logger):
+    """Ensure VM can recover from a bad command with unmatched quotes and still execute subsequent commands."""
+    vm_logger.info("Creating VMManage instance for bad command recovery test")
+    vm = VMManage(ezqmlocalfolder=ezqm_localfolder, logger=vm_logger)
+
+    vm_logger.info("Starting VM (timeout=20s)")
+    assert vm.start_vm(timeout_sec=20), "start_vm failed"
+
+    try:
+        # Step 1: run a bad command -> expect failure
+        cmd = "'"
+        vm_logger.info("exec_cmd: %r (timeout=2s)", cmd)
+        res = vm.exec_cmd(cmd, timeout_sec=2)
+        vm_logger.debug("exec_cmd result (expected timeout): %r", res)
+        assert not res["success"], "Command unexpectedly succeeded, should have timed out"
+
+        # Step 2: run a normal command to verify VM is still responsive
+        cmd2 = 'echo -n "hello" | base64'
+        vm_logger.info("exec_cmd after timeout: %r (timeout=10s)", cmd2)
+        res2 = vm.exec_cmd(cmd2, timeout_sec=10)
+        vm_logger.debug("exec_cmd result after timeout: %r", res2)
+        assert res2["success"], f"exec_cmd failed after timeout: {res2}"
+        assert res2["output"] == "aGVsbG8=", f"Unexpected output: {res2['output']}"
+
+    finally:
+        vm_logger.info("Stopping VM after timeout recovery test")
+        vm.stop_vm()
+        vm_logger.info("VM stopped")

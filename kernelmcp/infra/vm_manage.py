@@ -232,7 +232,7 @@ class VMManage:
             # child.before includes the command echo and command output; strip the echo line if present
             out = child.before or ""
             # Trim self.start_marker line if present without using regex
-            out = out.split(self.START_MARKER, 1)[-1].lstrip("\r\n")
+            out = out.rsplit(self.START_MARKER, 1)[-1].lstrip("\r\n")
             # Normalize: remove a leading echoed command line if it matches
             lines = out.splitlines()
             if lines and lines[0].strip() == cmd.strip():
@@ -240,6 +240,13 @@ class VMManage:
             output_text = "\n".join(lines).rstrip()
             return {"success": True, "reason": "", "output": output_text}
         except pexpect.TIMEOUT:
+            # Send three Ctrl-C to interrupt the command
+            try:
+                for _ in range(3):
+                    child.sendcontrol("c")
+                    time.sleep(0.3)
+            except Exception:
+                pass
             # Best-effort partial output
             partial = child.before or ""
             return {"success": False, "reason": "Timeout", "output": partial}
