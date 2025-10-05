@@ -158,7 +158,7 @@ def _evaluate_success(records: List[Dict]) -> Tuple[bool, Optional[str]]:
             elif msg == "error":
                 err = payload.get("msg") if isinstance(
                     payload, dict) else str(payload or "error")
-        elif t == "notify" and msg in {"running", "stopped"}:
+        elif t == "notify" and msg in {"running", "stopped", "thread-group-added"}:
             saw_notify = True
     if not saw_result:
         ok = True if saw_notify or not records else ok
