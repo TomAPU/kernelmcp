@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from functools import wraps
 
 from kernelmcp.plugins import McpPlugin, mcp_tool
-from kernelmcp.infra.vm_manage import VMManage
+from kernelmcp.infra import VMManage, RemoteGdbMI
 from kernelmcp.infra.utils import compile_c_code
 
 
@@ -21,6 +21,24 @@ def ensure_vm():
             if not getattr(self, 'vm', None):
                 raise RuntimeError(
                     f"{self.NAME} plugin not properly initialized with ezqm project dir. Check 'ezqmlocalfolder' in config.")
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+def ensure_gdb():
+    """Decorator to ensure the RemoteGdbMI instance is initialized before using a tool.
+
+    Raises:
+        RuntimeError: if the plugin was not properly initialized (e.g. missing config).
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            self = args[0]
+            if not getattr(self, 'gdb', None):
+                raise RuntimeError(
+                    f"{self.NAME} plugin not properly initialized with gdb parameters. Check 'gdbport' and 'vmlinux' in ezqmlocal.json.")
             return func(*args, **kwargs)
         return wrapper
     return decorator
@@ -86,6 +104,17 @@ class VMInteractPlugin(McpPlugin):
         except Exception as e:
             self.logger.error(f"{self.NAME} unexpected error during init: {e}")
             self.vm = None
+        # GDB
+        gdbport = self.vm.localconf.get("gdbport", 0)
+        vmlinux = self.vm.localconf.get("vmlinux", "")
+        if not gdbport or not vmlinux:
+            self.logger.warning(
+                f"{self.NAME} plugin: 'gdbport' or 'vmlinux' not set in ezqmlocal.json; GDB interaction disabled.")
+        else:
+            self.logger.info(
+                f"{self.NAME} plugin initialized with GDB port: {gdbport} and vmlinux: {vmlinux}")
+            self.gdb = RemoteGdbMI(binary_path=vmlinux,
+                                   port=gdbport, logger=self.logger)
 
     @mcp_tool
     @ensure_vm()
@@ -157,3 +186,21 @@ class VMInteractPlugin(McpPlugin):
         if not up["success"]:
             return {"success": False, "reason": f"Upload failed: {up['reason']}"}
         return {"success": True, "reason": ""}
+
+    # ---------- GDB-related tools ----------
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_connect(self, timeout_sec: float = 3.0) -> Dict[str, Any]:
+        """
+        Make the GDB connected to the virtual machine.
+        Once connected, the virtual machine is halted.
+        """
+        return self.gdb.connect(timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_execute(self, cmd: str, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """
+        Execute a GDB command and return the result.
+        """
+        return self.gdb.send(cmd, timeout_sec=timeout_sec)
