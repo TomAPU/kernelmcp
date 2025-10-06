@@ -31,7 +31,7 @@ class RemoteGdbMI:
         self._state = "idle"
 
         self.gdb = GdbController(
-            command=["gdb", "--nx", "--quiet", "--interpreter=mi2"])
+            command=["gdb", "--quiet", "--interpreter=mi2"])
 
         # Load symbols
         res = self.set_file(self.binary_path)

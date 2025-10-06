@@ -393,3 +393,21 @@ def test_cli_command_execution_result(gdbserver):
 
     finally:
         gdb.close()
+
+
+def test_kbpf_command(gdbserver):
+    """
+    Verify kbpf --help works to ensure gef is loaded
+    """
+    exe, port = gdbserver
+    gdb = RemoteGdbMI(exe, port)
+    try:
+        assert gdb.connect(timeout_sec=5.0)["ok"]
+
+        r1 = gdb.send('kbpf --help', timeout_sec=3.0)
+        assert r1["ok"], f"kbpf --help failed: {r1.get('error')}"
+        out1 = r1.get("output", "")
+        assert "usage: kbpf" in out1, f"unexpected output: {out1!r}"
+
+    finally:
+        gdb.close()
