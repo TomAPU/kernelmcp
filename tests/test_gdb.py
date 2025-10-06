@@ -237,10 +237,6 @@ def _first_value_from_done(records, key="value"):
     return None
 
 
-# ---------------------------
-# New tests (non-invasive)
-# ---------------------------
-
 def test_cli_send_and_error_path(gdbserver):
     """Validate CLI passthrough via send(), and ensure errors propagate sanely."""
     exe, port = gdbserver
@@ -377,5 +373,23 @@ def test_step_disassemble_registers_memory_flow(gdbserver):
         reasons = _stop_reasons(final_stops)
         assert any(r in ("exited-normally", "exited")
                    for r in reasons), f"Unexpected final reasons: {reasons}"
+    finally:
+        gdb.close()
+
+
+def test_cli_command_execution_result(gdbserver):
+    """
+    Verify send()'s output 
+    """
+    exe, port = gdbserver
+    gdb = RemoteGdbMI(exe, port)
+    try:
+        assert gdb.connect(timeout_sec=5.0)["ok"]
+
+        r1 = gdb.send('print "Hello, world!"', timeout_sec=3.0)
+        assert r1["ok"], f"double-quoted print failed: {r1.get('error')}"
+        out1 = r1.get("output", "")
+        assert "Hello, world!" in out1, f"unexpected output: {out1!r}"
+
     finally:
         gdb.close()

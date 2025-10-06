@@ -2,6 +2,7 @@
 # Original source: https://github.com/pwno-io/pwno-mcp/blob/main/pwnomcp/gdb/controller.py
 from __future__ import annotations
 import logging
+import copy
 from typing import Dict, List, Optional, Union, Tuple, Any
 
 from pygdbmi.gdbcontroller import GdbController
@@ -45,8 +46,7 @@ class RemoteGdbMI:
 
     def send(self, cmd: str, timeout_sec: float = 2.0) -> Dict[str, Any]:
         """Execute CLI command."""
-        mi_cmd = f'-interpreter-exec console "{_escape_quotes(cmd)}"'
-        return self._mi(mi_cmd, timeout_sec)
+        return self._convert_mi_output(self._mi(cmd, timeout_sec))
 
     def connect(self, timeout_sec: float = 3.0) -> Dict[str, Any]:
         """Connect to remote gdbserver at host:port."""
@@ -114,6 +114,22 @@ class RemoteGdbMI:
         return self._mi(f"-file-exec-and-symbols {filepath}", timeout_sec)
     # fmt: on
     # ---------- Internals ----------
+
+    def _convert_mi_output(self, out: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Convert pygdbmi output to a more friendly format.
+        The "records" field is currently a list of dict.  
+        We'd like to convert it into string
+        [{'type': 'log', 'message': None, 'payload': 'print "Hello, world!"\n', 'stream': 'stdout'}, {'type': 'console', 'message': None, 'payload': '$1 = "Hello, world!"\n', 'stream': 'stdout'}, {'type': 'result', 'message': 'done', 'payload': None, 'token': None, 'stream': 'stdout'}]
+        """
+        assert "records" in out and isinstance(out["records"], list)
+        new_out = copy.deepcopy(out)
+        lines = ""
+        for r in out["records"]:
+            if "payload" in r and isinstance(r.get("payload"), str):
+                lines += r["payload"]
+        new_out["output"] = lines
+        return new_out
 
     def _mi(self, mi_cmd: str, timeout_sec: float) -> Dict[str, Any]:
         """Core send wrapper with logging + state tracking."""
