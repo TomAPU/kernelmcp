@@ -130,7 +130,19 @@ class VMInteractPlugin(McpPlugin):
         """
         Restart the virtual machine. Use when the virtual machine is halted or unresponsive.
         """
-        return {"success": self.vm.restart_vm(timeout_sec=timeout_sec)}
+        if not self.vm.restart_vm(timeout_sec=timeout_sec):
+            return {
+                "success": False,
+                "reason": "Failed to restart the virtual machine",
+            }
+        # Delete and recreate GDB instance to reset connection state
+        if getattr(self, 'gdb', None):
+            del self.gdb
+            gdbport = self.vm.localconf.get("gdbport", 0)
+            vmlinux = self.vm.localconf.get("vmlinux", "")
+            self.gdb = RemoteGdbMI(binary_path=vmlinux,
+                                   port=gdbport, logger=self.logger)
+        return {"success": True, "reason": ""}
 
     @mcp_tool
     @ensure_vm()
