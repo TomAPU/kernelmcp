@@ -173,19 +173,76 @@ class VMInteractPlugin(McpPlugin):
     def exec_cmd(self, cmd: str, timeout_sec: int = 20) -> Dict[str, Any]:
         """
         Execute a command in the virtual machine and return its output.
+        This is a high-level primitive, more suitable for simple commands (such as viewing configurations in the virtual machine via cat).
         Use this tool only when the virtual machine is running.
-
-        On success:
-          {"success": True, "reason": "", "output": "<captured text>"}
-        On no-VM:
-          {"success": False, "reason": "The virtual machine is not started", "output": ""}
-        On timeout:
-          {"success": False, "reason": "Timeout", "output": "<partial text>"}
         """
         ret = self.vm.exec_cmd(cmd, timeout_sec=timeout_sec)
         if ret["reason"] == "Timeout" and self.gdb.get_state() == "stopped":
             ret["reason"] = "The virtual machine is halted after executing the command. It's possible that we hit a breakpoint."
         return ret
+
+    @mcp_tool
+    @ensure_vm()
+    @ensure_vm_not_halted()
+    def vm_sendline(self, line: str) -> Dict[str, Any]:
+        """
+        Send a line to the VM console without waiting for a prompt.
+        This is a low-level primitive, and more suitable to be used in kernel debugging scenarios 
+        (where breakpoints might hit, so you need to send without receiving and then play with GDB).
+        Use this tool only when the virtual machine is running.
+        """
+        try:
+            self.vm.sendline(line)
+            return {"success": True, "reason": ""}
+        except Exception as e:
+            return {"success": False, "reason": str(e)}
+
+    @mcp_tool
+    @ensure_vm()
+    @ensure_vm_not_halted()
+    def vm_sendcontrol(self, char: str) -> Dict[str, Any]:
+        """
+        Send a control character (such as 'c' as Ctrl-C) to the VM console without waiting for a prompt.
+        This is a low-level primitive; prefer this for kernel/debug scenarios where
+        you need to poke the console regardless of prompt state.
+        Use this tool only when the virtual machine is running.
+        """
+        try:
+            # Delegate to the underlying method you already have.
+            self.vm.sendcontrol(char)
+            return {"success": True, "reason": ""}
+        except Exception as e:
+            return {"success": False, "reason": str(e)}
+
+    @mcp_tool
+    @ensure_vm()
+    @ensure_vm_not_halted()
+    def vm_receive(self, timeout: int = 1) -> Dict[str, Any]:
+        """
+        Read from the VM console until timeout or until the prompt is seen.
+
+        Returns a dict:
+        {"success": bool, "content": str, "reason": "Timeout" | "Meets prompt" | "<error msg>"}
+
+        The underlying implementation is expected to perform reading until
+        1) timeout occurs, or
+        2) the prompt (root@syzkaller, indicating the VM is ready for input) is observed.
+        """
+        try:
+            # Your existing method returns {"content": str, "reason": "..."}.
+            res = self.vm.receive(timeout=timeout)
+            # Normalize to include a success flag.
+            return {
+                "success": True,
+                "content": res.get("content", ""),
+                "reason": res.get("reason", ""),
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "content": "",
+                "reason": str(e),
+            }
 
     @mcp_tool
     @ensure_vm()
