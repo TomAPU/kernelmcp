@@ -127,15 +127,6 @@ def gdbserver(hello_exe):
         proc.kill()
 
 
-def _wait_state(gdb: RemoteGdbMI, expect: set[str], timeout: float = 3.0) -> bool:
-    end = time.time() + timeout
-    while time.time() < end:
-        if gdb.get_state() in expect:
-            return True
-        time.sleep(0.05)
-    return gdb.get_state() in expect
-
-
 def test_gdbserver_connect(gdbserver):
     exe, port = gdbserver
     gdb = RemoteGdbMI(exe, port)
@@ -170,22 +161,28 @@ def test_gdb_break_and_eval_then_exit(gdbserver):
         bres = gdb.set_breakpoint("main", timeout_sec=5.0)
         assert bres["ok"], f"break main failed: {bres.get('error')}"
 
-        # Continue; expect to stop at the breakpoint
+        # Continue; expect to stop at the breakpoint -> wait_for_stop should observe it
         cont1 = gdb.continue_execution(timeout_sec=5.0)
         assert cont1["ok"], f"continue failed: {cont1.get('error')}"
-        assert _wait_state(
-            gdb, {"stopped"}, timeout=2.0), f"state not stopped, got {gdb.get_state()}"
+        rstop = gdb.wait_for_stop(timeout_sec=5.0)
+        assert rstop.get("ok"), f"wait_for_stop (main) failed: {rstop}"
+        # we expect to have hit the breakpoint at main
+        assert (rstop.get("stop") or {}).get(
+            "reason") == "breakpoint-hit", f"unexpected stop: {rstop}"
 
-    # Evaluate an expression using CLI so textual response is present
+        # Evaluate an expression using CLI so textual response is present
         pres = gdb.send("print 3+4", timeout_sec=3.0)
         assert pres["ok"], f"print failed: {pres.get('error')}"
         assert "7" in (pres.get(
             "response") or ""), f"Expected '7' in response, got: {pres.get('response')!r}"
 
-        # Continue to program end; expect exited/exited-normally
+        # Continue to program end; expect an exit stop
         cont2 = gdb.continue_execution(timeout_sec=5.0)
         assert cont2["ok"], f"final continue failed: {cont2.get('error')}"
-        assert _wait_state(gdb, {"stopped", "exited"}, timeout=2.0)
+        rstop2 = gdb.wait_for_stop(timeout_sec=5.0)
+        assert rstop2.get("ok"), f"final wait_for_stop failed: {rstop2}"
+        assert (rstop2.get("stop") or {}).get("reason") in {
+            "exited", "exited-normally", "exited-signalled"}
     finally:
         gdb.close()
 
@@ -262,8 +259,10 @@ def test_step_disassemble_registers_memory_flow(gdbserver):
         assert gdb.set_breakpoint("main", timeout_sec=5.0)["ok"]
         hit = gdb.continue_execution(timeout_sec=5.0)
         assert hit["ok"], f"continue to main failed: {hit.get('error')}"
-        assert _wait_state(
-            gdb, {"stopped"}, timeout=2.0), "Did not observe stopped state at main"
+        stop_main = gdb.wait_for_stop(timeout_sec=5.0)
+        assert stop_main.get("ok"), f"wait_for_stop (main) failed: {stop_main}"
+        assert (stop_main.get("stop") or {}).get(
+            "reason") == "breakpoint-hit", f"unexpected stop: {stop_main}"
 
         # Disassemble near $pc
         dasm = gdb.get_disassembly_mi(length=64, timeout_sec=3.0)
@@ -291,12 +290,14 @@ def test_step_disassemble_registers_memory_flow(gdbserver):
         assert any(s in (ev.get("response") or "") for s in (
             "30", "0x1e")), f"Expected 30, got {ev.get('response')!r}"
 
-        # Finish current frame or just continue safely to the end
-        # (Different libcs/toolchains vary; prefer continue to avoid flakiness)
+        # Continue to end and wait for final stop (exit)
         cont = gdb.continue_execution(timeout_sec=5.0)
         assert cont["ok"], f"final continue failed: {cont.get('error')}"
-        assert _wait_state(gdb, {"stopped", "exited"},
-                           timeout=2.0), "No final stop observed"
+        final_stop = gdb.wait_for_stop(timeout_sec=5.0)
+        assert final_stop.get(
+            "ok"), f"final wait_for_stop failed: {final_stop}"
+        assert (final_stop.get("stop") or {}).get("reason") in {
+            "exited", "exited-normally", "exited-signalled"}
     finally:
         gdb.close()
 
@@ -335,3 +336,55 @@ def test_kbpf_command(gdbserver):
 
     finally:
         gdb.close()
+
+
+def test_wait_for_stop_breakpoint_hit(gdbserver):
+    """wait_for_stop should return when a breakpoint is actually hit."""
+    exe, port = gdbserver
+    gdb = RemoteGdbMI(exe, port)
+    try:
+        # Connect and set a breakpoint at main
+        assert gdb.connect(timeout_sec=5.0)["ok"]
+        b = gdb.set_breakpoint("main", timeout_sec=5.0)
+        assert b["ok"], f"break main failed: {b.get('error')}"
+
+        # Continue; expect to hit the breakpoint, and wait_for_stop should observe it
+        cont = gdb.continue_execution(timeout_sec=5.0)
+        assert cont["ok"], f"continue failed: {cont.get('error')}"
+        res = gdb.wait_for_stop(timeout_sec=5.0)
+        assert res and res.get("ok"), f"wait_for_stop failed: {res}"
+        stop = res.get("stop") or {}
+        assert stop.get(
+            "reason") == "breakpoint-hit", f"unexpected stop: {stop!r}"
+        # Best-effort sanity: breakpoint info should be present
+        assert stop.get(
+            "breakpoint") is not None, f"missing breakpoint info: {stop!r}"
+
+        # Cleanly continue to program exit for teardown hygiene
+        cont2 = gdb.continue_execution(timeout_sec=5.0)
+        assert cont2["ok"], f"final continue failed: {cont2.get('error')}"
+        res2 = gdb.wait_for_stop(timeout_sec=5.0)
+        assert res2.get("ok"), f"final wait_for_stop failed: {res2}"
+        assert (res2.get("stop") or {}).get("reason") in {
+            "exited", "exited-normally", "exited-signalled"}
+    finally:
+        gdb.close()
+
+
+def test_wait_for_stop_timeout_running_inferior(persistent_gdbserver):
+    """wait_for_stop should time out when the inferior keeps running with no stops."""
+    exe, port, proc = persistent_gdbserver
+    gdb = RemoteGdbMI(exe, port)
+    try:
+        # Connect -> initial stop at entry; then run without breakpoints.
+        assert gdb.connect(timeout_sec=5.0)["ok"]
+        cont = gdb.continue_execution(timeout_sec=1.0)
+        assert cont["ok"], f"continue failed: {cont.get('error')}"
+
+        # Since the program loops forever and we set no breakpoints, we expect a timeout.
+        res = gdb.wait_for_stop(timeout_sec=0.7)
+        assert not res["ok"] and res.get(
+            "error") == "timeout", f"expected timeout, got: {res}"
+    finally:
+        gdb.close()
+        proc.terminate()

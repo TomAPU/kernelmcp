@@ -3,7 +3,9 @@
 from __future__ import annotations
 import logging
 import copy
-from typing import Dict, List, Optional, Union, Tuple, Any
+import threading
+import time
+from typing import Dict, List, Optional, Union, Tuple, Any, Callable
 
 from pygdbmi.gdbcontroller import GdbController
 
@@ -30,6 +32,13 @@ class RemoteGdbMI:
         self._connected = False
         self._state = "idle"
 
+        # ---- internal async/event machinery (minimal, additive) ----
+        self._io_lock = threading.RLock()
+        self._cv = threading.Condition()
+        self._bg_stop = threading.Event()
+        self._event_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+        self._last_stop: Optional[Dict[str, Any]] = None
+
         self.gdb = GdbController(
             command=["gdb", "--quiet", "--interpreter=mi2"])
 
@@ -41,6 +50,12 @@ class RemoteGdbMI:
         # Default settings
         for mi in ("-gdb-set pagination off", "-gdb-set confirm off", "-gdb-set mi-async on"):
             self._mi(mi, timeout_sec=2.0)
+
+        # start background poller to consume async MI notifications (e.g., *stopped)
+        self._bg_thread = threading.Thread(
+            target=self._bg_loop, name="RemoteGdbMI-bg", daemon=True
+        )
+        self._bg_thread.start()
 
     # ---------- Primary API (unchanged) ----------
 
@@ -77,6 +92,12 @@ class RemoteGdbMI:
 
     def close(self) -> None:
         try:
+            self._bg_stop.set()
+            try:
+                if getattr(self, "_bg_thread", None):
+                    self._bg_thread.join(timeout=1.0)
+            except Exception as e:
+                self.logger.error(f"Error stopping background thread: {e}")
             if self._connected:
                 self.disconnect()
         except Exception as e:
@@ -119,12 +140,45 @@ class RemoteGdbMI:
     def set_file(self, filepath: str, *, timeout_sec: float = 5.0):
         return self._mi(f"-file-exec-and-symbols {filepath}", timeout_sec)
     # fmt: on
+
+    # ---------- New: wait_for_stop ----------
+    def wait_for_stop(self, *, timeout_sec: Optional[float] = None) -> Dict[str, Any]:
+        """
+        Block until a '*stopped' async notify is observed (e.g., breakpoint hit/step/signal).
+        Returns {"ok": True, "stop": {...}} or {"ok": False, "error": "timeout"}.
+        """
+        deadline = (time.monotonic() + timeout_sec) if timeout_sec is not None else None
+        with self._cv:
+            if self._state == "stopped" and self._last_stop is not None:
+                return {"ok": True, "stop": copy.deepcopy(self._last_stop)}
+            while True:
+                remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+                if remaining == 0.0:
+                    return {"ok": False, "error": "timeout"}
+                self._cv.wait(timeout=remaining)
+                if self._state == "stopped" and self._last_stop is not None:
+                    return {"ok": True, "stop": copy.deepcopy(self._last_stop)}
+                if deadline is not None and time.monotonic() >= deadline:
+                    return {"ok": False, "error": "timeout"}
+
+    # ---------- New: optional event callback ----------
+    def set_event_callback(self, callback: Optional[Callable[[Dict[str, Any]], None]]) -> None:
+        """
+        Set a callback to receive async notify events.
+        The callback will be invoked with a dict like:
+          {"message": "stopped", "stop": {...}} |
+          {"message": "running"} |
+          {"message": "thread-group-exited", "payload": {...}}
+        """
+        self._event_callback = callback
+
     # ---------- Internals ----------
 
     def _mi(self, mi_cmd: str, timeout_sec: float) -> Dict[str, Any]:
         """Core send wrapper with logging + state tracking."""
         try:
-            out = self.gdb.write(mi_cmd, timeout_sec=timeout_sec)
+            with self._io_lock:
+                out = self.gdb.write(mi_cmd, timeout_sec=timeout_sec)
             self._ingest_state(out)
             ok, err = _evaluate_success(out)
             response = ""
@@ -141,12 +195,44 @@ class RemoteGdbMI:
     def _ingest_state(self, records: List[Dict[str, Any]]) -> None:
         for r in records or []:
             if r.get("type") == "notify":
-                if r.get("message") == "running":
-                    self._state = "running"
-                elif r["message"] == "stopped":
-                    self._state = "stopped"
-                elif r["message"] == "thread-group-exited":
-                    self._state = "exited"
+                msg = r.get("message")
+                if msg == "running":
+                    with self._cv:
+                        self._state = "running"
+                        self._cv.notify_all()
+                    self._fire_event({"message": "running"})
+                elif msg == "stopped":
+                    stop = _parse_stopped_record(r)
+                    with self._cv:
+                        self._state = "stopped"
+                        self._last_stop = stop
+                        self._cv.notify_all()
+                    self._fire_event({"message": "stopped", "stop": stop})
+                elif msg == "thread-group-exited":
+                    with self._cv:
+                        self._state = "exited"
+                        self._cv.notify_all()
+                    self._fire_event({"message": "thread-group-exited", "payload": r.get("payload")})
+
+    def _fire_event(self, evt: Dict[str, Any]) -> None:
+        cb = self._event_callback
+        if cb:
+            try:
+                cb(copy.deepcopy(evt))
+            except Exception as e:
+                self.logger.error(f"event callback error: {e}")
+
+    def _bg_loop(self) -> None:
+        """Background poller for async MI notifications."""
+        while not self._bg_stop.is_set():
+            try:
+                with self._io_lock:
+                    out = self.gdb.get_gdb_response(timeout_sec=0.1, raise_error_on_timeout=False)
+                if out:
+                    self._ingest_state(out)
+            except Exception as e:
+                self.logger.error(f"Background poll error: {e}")
+                time.sleep(0.1)
 
     def __del__(self) -> None:
         try:
@@ -177,3 +263,25 @@ def _evaluate_success(records: List[Dict]) -> Tuple[bool, Optional[str]]:
 
 def _escape_quotes(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', r'\"')
+
+
+def _parse_stopped_record(rec: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract useful fields from a '*stopped' notify record."""
+    p = rec.get("payload") or {}
+    stop: Dict[str, Any] = {
+        "reason": p.get("reason"),
+        "thread_id": p.get("thread-id"),
+        "stopped_threads": p.get("stopped-threads"),
+        "core": p.get("core"),
+    }
+    if "bkptno" in p:
+        try:
+            bkptno = int(p.get("bkptno"))
+        except Exception:
+            bkptno = p.get("bkptno")
+        stop["breakpoint"] = {"number": bkptno, "locno": p.get("locno")}
+    if isinstance(p.get("frame"), dict):
+        stop["frame"] = p["frame"]
+    if "signal-name" in p or "signal-meaning" in p:
+        stop["signal"] = {"name": p.get("signal-name"), "meaning": p.get("signal-meaning")}
+    return stop
