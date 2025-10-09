@@ -141,18 +141,19 @@ class RemoteGdbMI:
         return self._mi(f"-file-exec-and-symbols {filepath}", timeout_sec)
     # fmt: on
 
-    # ---------- New: wait_for_stop ----------
     def wait_for_stop(self, *, timeout_sec: Optional[float] = None) -> Dict[str, Any]:
         """
         Block until a '*stopped' async notify is observed (e.g., breakpoint hit/step/signal).
         Returns {"ok": True, "stop": {...}} or {"ok": False, "error": "timeout"}.
         """
-        deadline = (time.monotonic() + timeout_sec) if timeout_sec is not None else None
+        deadline = (time.monotonic() +
+                    timeout_sec) if timeout_sec is not None else None
         with self._cv:
             if self._state == "stopped" and self._last_stop is not None:
                 return {"ok": True, "stop": copy.deepcopy(self._last_stop)}
             while True:
-                remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+                remaining = None if deadline is None else max(
+                    0.0, deadline - time.monotonic())
                 if remaining == 0.0:
                     return {"ok": False, "error": "timeout"}
                 self._cv.wait(timeout=remaining)
@@ -160,17 +161,6 @@ class RemoteGdbMI:
                     return {"ok": True, "stop": copy.deepcopy(self._last_stop)}
                 if deadline is not None and time.monotonic() >= deadline:
                     return {"ok": False, "error": "timeout"}
-
-    # ---------- New: optional event callback ----------
-    def set_event_callback(self, callback: Optional[Callable[[Dict[str, Any]], None]]) -> None:
-        """
-        Set a callback to receive async notify events.
-        The callback will be invoked with a dict like:
-          {"message": "stopped", "stop": {...}} |
-          {"message": "running"} |
-          {"message": "thread-group-exited", "payload": {...}}
-        """
-        self._event_callback = callback
 
     # ---------- Internals ----------
 
@@ -212,7 +202,8 @@ class RemoteGdbMI:
                     with self._cv:
                         self._state = "exited"
                         self._cv.notify_all()
-                    self._fire_event({"message": "thread-group-exited", "payload": r.get("payload")})
+                    self._fire_event(
+                        {"message": "thread-group-exited", "payload": r.get("payload")})
 
     def _fire_event(self, evt: Dict[str, Any]) -> None:
         cb = self._event_callback
@@ -227,7 +218,8 @@ class RemoteGdbMI:
         while not self._bg_stop.is_set():
             try:
                 with self._io_lock:
-                    out = self.gdb.get_gdb_response(timeout_sec=0.1, raise_error_on_timeout=False)
+                    out = self.gdb.get_gdb_response(
+                        timeout_sec=0.1, raise_error_on_timeout=False)
                 if out:
                     self._ingest_state(out)
             except Exception as e:
@@ -283,5 +275,6 @@ def _parse_stopped_record(rec: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(p.get("frame"), dict):
         stop["frame"] = p["frame"]
     if "signal-name" in p or "signal-meaning" in p:
-        stop["signal"] = {"name": p.get("signal-name"), "meaning": p.get("signal-meaning")}
+        stop["signal"] = {"name": p.get(
+            "signal-name"), "meaning": p.get("signal-meaning")}
     return stop
