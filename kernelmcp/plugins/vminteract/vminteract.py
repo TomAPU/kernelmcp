@@ -44,6 +44,29 @@ def ensure_gdb():
     return decorator
 
 
+def ensure_vm_not_halted():
+    """
+    Decorator to ensure the VM is running before using a tool.
+    This is done by checking if self.gdb is not in a halted state such as 'stopped'.
+    If GDB is not connected, we assume the VM is running.
+    This time, we don't do a raise but return a dict with success=False and a reason.
+    """
+    halted_states = {'stopped'}
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            self: VMInteractPlugin = args[0]
+            if getattr(self, 'gdb', None) and self.gdb.get_state() in halted_states:
+                return {
+                    "success": False,
+                    "reason": "The virtual machine is halted. You may want to resume it in GDB before using this tool.",
+                }
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
 class VMInteractPlugin(McpPlugin):
     """Plugin that exposes basic virtual machine interaction capabilities via ezqm.
 
@@ -146,6 +169,7 @@ class VMInteractPlugin(McpPlugin):
 
     @mcp_tool
     @ensure_vm()
+    @ensure_vm_not_halted()
     def exec_cmd(self, cmd: str, timeout_sec: int = 20) -> Dict[str, Any]:
         """
         Execute a command in the virtual machine and return its output.
@@ -158,10 +182,14 @@ class VMInteractPlugin(McpPlugin):
         On timeout:
           {"success": False, "reason": "Timeout", "output": "<partial text>"}
         """
-        return self.vm.exec_cmd(cmd, timeout_sec=timeout_sec)
+        ret = self.vm.exec_cmd(cmd, timeout_sec=timeout_sec)
+        if ret["reason"] == "Timeout" and self.gdb.get_state() == "stopped":
+            ret["reason"] = "The virtual machine is halted after executing the command. It's possible that we hit a breakpoint."
+        return ret
 
     @mcp_tool
     @ensure_vm()
+    @ensure_vm_not_halted()
     def compile_c_and_upload(self, code: str, dest_path: str, flags: Optional[list[str]] = None) -> Dict[str, Any]:
         """
         Compile given C code into a binary using gcc, then upload it to the virtual machine.
@@ -200,6 +228,16 @@ class VMInteractPlugin(McpPlugin):
         return {"success": True, "reason": ""}
 
     # ---------- GDB-related tools ----------
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_get_state(self) -> str:
+        """
+        Get current GDB state: "idle", "running", "stopped", "exited"
+        If GDB is not connected, returns "idle".
+        Note: the stopped state may indicate the VM is halted (e.g. at a breakpoint).
+        """
+        return self.gdb.get_state()
+
     @mcp_tool
     @ensure_gdb()
     def gdb_connect(self, timeout_sec: float = 3.0) -> Dict[str, Any]:
