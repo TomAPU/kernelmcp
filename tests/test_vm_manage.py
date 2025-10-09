@@ -145,3 +145,46 @@ def test_vm_exec_bad_command_recovery(ezqm_localfolder, vm_logger):
         vm_logger.info("Stopping VM after timeout recovery test")
         vm.stop_vm()
         vm_logger.info("VM stopped")
+
+
+def test_vm_console_primitives(ezqm_localfolder, vm_logger):
+    """Smoke test for low-level console primitives: sendline/sendcontrol/receive."""
+    vm_logger.info("Creating VMManage instance for console primitives test")
+    vm = VMManage(ezqmlocalfolder=ezqm_localfolder, logger=vm_logger)
+
+    vm_logger.info("Starting VM (timeout=20s)")
+    assert vm.start_vm(timeout_sec=20), "start_vm failed"
+
+    try:
+        # Send a simple line and verify receive returns structured result
+        vm_logger.info("Sending line via sendline()")
+        vm.sendline('echo -n "vm-hello"')
+        r = vm.receive(timeout=5)
+        vm_logger.debug("receive result: %r", r)
+        assert isinstance(r, dict)
+        assert "content" in r and "reason" in r
+        assert r["reason"] == "Meets prompt"
+        assert "vm-hello" in r["content"]
+
+        # Send a sleep for 100 seconds, we expect receive to timeout
+        vm_logger.info("Sending long sleep command via sendline()")
+        vm.sendline("sleep 100")
+        r = vm.receive(timeout=1)
+        vm_logger.debug("receive result during sleep: %r", r)
+        assert isinstance(r, dict)
+        assert "content" in r and "reason" in r
+        assert r["reason"] == "Timeout"
+
+        # Then send control-C to interrupt it, we expect receive to return promptly
+        vm_logger.info("Sending control via sendcontrol()")
+        vm.sendcontrol("c")
+        r2 = vm.receive(timeout=2)
+        vm_logger.debug("receive after control: %r", r2)
+        assert isinstance(r2, dict)
+        assert "content" in r2 and "reason" in r2
+        assert r2["reason"] == "Meets prompt"
+
+    finally:
+        vm_logger.info("Stopping VM after console primitives test")
+        vm.stop_vm()
+        vm_logger.info("VM stopped")

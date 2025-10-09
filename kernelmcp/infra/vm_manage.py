@@ -200,6 +200,59 @@ class VMManage:
         self.stop_vm()
         return self.start_vm(timeout_sec=timeout_sec)
 
+    def sendline(self, line: str) -> None:
+        """Send a line to the VM console without waiting for prompt."""
+        if not self.is_running():
+            raise RuntimeError("VM is not running")
+        child = self._child
+        assert child is not None
+        child.sendline(line)
+
+    def sendcontrol(self, char: str) -> None:
+        """Send a control character to the VM console without waiting for prompt."""
+        if not self.is_running():
+            raise RuntimeError("VM is not running")
+        child = self._child
+        assert child is not None
+        child.sendcontrol(char)
+
+    def receive(self, timeout: int = 1) -> Dict[str, Any]:
+        """Read from the VM console until timeout or until the prompt is seen.
+
+        Returns a dict: {"content": str, "reason": "Timeout"|"Meets prompt"}.
+
+        The method will continuously attempt non-blocking reads until the deadline.
+        If the prompt (self.prompt) is observed in the accumulated output, return
+        immediately with reason "Meets prompt". On normal timeout with no prompt,
+        return whatever was read and reason "Timeout". On EOF, raise RuntimeError.
+        """
+        if not self.is_running():
+            raise RuntimeError("VM is not running")
+        child = self._child
+        assert child is not None
+
+        deadline = time.time() + float(timeout)
+        buf = ""
+        # Loop until deadline, performing short non-blocking reads.
+        while time.time() < deadline:
+            try:
+                chunk = child.read_nonblocking(size=4096, timeout=0.1)
+                if chunk:
+                    buf += chunk
+                    # If prompt regex appears anywhere in buffer, return early
+                    if self._prompt_re.search(buf):
+                        return {"content": buf, "reason": "Meets prompt"}
+                else:
+                    # No data this iteration; continue until deadline
+                    pass
+            except pexpect.TIMEOUT:
+                # no data available right now; keep waiting until deadline
+                pass
+            except pexpect.EOF:
+                raise RuntimeError("VM process has exited")
+        # Deadline passed
+        return {"content": buf, "reason": "Timeout"}
+
     def exec_cmd(self, cmd: str, timeout_sec: int = 20) -> Dict[str, Any]:
         """Execute a command on the VM; return dict with success, reason, output.
 
