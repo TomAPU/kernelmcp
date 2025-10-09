@@ -46,7 +46,7 @@ class RemoteGdbMI:
 
     def send(self, cmd: str, timeout_sec: float = 2.0) -> Dict[str, Any]:
         """Execute CLI command."""
-        return self._convert_mi_output(self._mi(cmd, timeout_sec))
+        return self._mi(cmd, timeout_sec)
 
     def connect(self, timeout_sec: float = 3.0) -> Dict[str, Any]:
         """Connect to remote gdbserver at host:port."""
@@ -64,6 +64,12 @@ class RemoteGdbMI:
         res = self._mi("-target-detach", timeout_sec)
         self._connected, self._state = False, "idle"
         return res
+
+    def get_state(self) -> str:
+        """
+        Get current state: "idle", "running", "stopped", "exited"
+        """
+        return self._state
 
     @property
     def is_connected(self) -> bool:
@@ -115,34 +121,22 @@ class RemoteGdbMI:
     # fmt: on
     # ---------- Internals ----------
 
-    def _convert_mi_output(self, out: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Convert pygdbmi output to a more friendly format.
-        The "records" field is currently a list of dict.  
-        We'd like to convert it into string
-        [{'type': 'log', 'message': None, 'payload': 'print "Hello, world!"\n', 'stream': 'stdout'}, {'type': 'console', 'message': None, 'payload': '$1 = "Hello, world!"\n', 'stream': 'stdout'}, {'type': 'result', 'message': 'done', 'payload': None, 'token': None, 'stream': 'stdout'}]
-        """
-        assert "records" in out and isinstance(out["records"], list)
-        new_out = copy.deepcopy(out)
-        lines = ""
-        for r in out["records"]:
-            if "payload" in r and isinstance(r.get("payload"), str):
-                lines += r["payload"]
-        new_out["output"] = lines
-        return new_out
-
     def _mi(self, mi_cmd: str, timeout_sec: float) -> Dict[str, Any]:
         """Core send wrapper with logging + state tracking."""
         try:
             out = self.gdb.write(mi_cmd, timeout_sec=timeout_sec)
             self._ingest_state(out)
             ok, err = _evaluate_success(out)
+            response = ""
+            for r in out:
+                if "payload" in r and isinstance(r.get("payload"), str):
+                    response += r["payload"]
             self.logger.debug(
                 "cmd=%r, ok=%s, error=%s, records=%s", mi_cmd, ok, err, out)
-            return {"ok": ok, "records": out, "error": err}
+            return {"ok": ok, "response": response, "error": err}
         except Exception as e:
             self.logger.error("_mi() error for %r: %s", mi_cmd, e)
-            return {"ok": False, "records": [], "error": str(e)}
+            return {"ok": False, "response": "", "error": str(e)}
 
     def _ingest_state(self, records: List[Dict[str, Any]]) -> None:
         for r in records or []:
