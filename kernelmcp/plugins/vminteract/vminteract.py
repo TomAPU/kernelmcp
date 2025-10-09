@@ -216,3 +216,120 @@ class VMInteractPlugin(McpPlugin):
         Execute a GDB command and return the result.
         """
         return self.gdb.send(cmd, timeout_sec=timeout_sec)
+    # ---------- GDB MI execution control ----------
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_continue(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Continue program execution until a breakpoint or program exit."""
+        return self.gdb.continue_execution(timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_finish(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Run until the current function returns."""
+        return self.gdb.finish(timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_next(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Step over the next source line."""
+        return self.gdb.next(timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_step(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Step into the next source line."""
+        return self.gdb.step(timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_nexti(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Step over the next instruction."""
+        return self.gdb.nexti(timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_stepi(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Step into the next instruction."""
+        return self.gdb.stepi(timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_return(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Return from the current function."""
+        return self.gdb.return_from_function(timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_until(self, locspec: Optional[str] = None, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Continue execution until the specified location (or next line if not provided)."""
+        return self.gdb.until(locspec, timeout_sec=timeout_sec)
+
+    # ---------- GDB MI breakpoints ----------
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_break_insert(self, location: str, condition: Optional[str] = None, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Insert a new breakpoint at the given location, optionally with a condition."""
+        return self.gdb.set_breakpoint(location, condition, timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_break_list(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """List all breakpoints."""
+        return self.gdb.list_breakpoints(timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_break_delete(self, number: int, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Delete a specific breakpoint by number."""
+        return self.gdb.delete_breakpoint(number, timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_break_enable(self, number: int, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Enable a specific breakpoint."""
+        return self.gdb.enable_breakpoint(number, timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_break_disable(self, number: int, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Disable a specific breakpoint."""
+        return self.gdb.disable_breakpoint(number, timeout_sec=timeout_sec)
+
+    # ---------- GDB MI data inspection ----------
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_eval(self, expr: str, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Evaluate an expression in the current context."""
+        return self.gdb.evaluate_expression(expr, timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_registers(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """List all registers and their values."""
+        return self.gdb.get_registers_mi(timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_backtrace(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Get the current backtrace (stack frames)."""
+        return self.gdb.get_backtrace_mi(timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_disasm(self, length: int = 64, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Disassemble instructions around the current PC."""
+        return self.gdb.get_disassembly_mi(length=length, timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_read_mem(self, addr: str, fmt: str, size: int, rows: int, cols: int, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Read memory in the given format."""
+        return self.gdb.read_memory_mi(addr, fmt, size, rows, cols, timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_read_mem_bytes(self, addr: str, n: int, timeout_sec: float = 2.0) -> Dict[str, Any]:
+        """Read raw memory bytes."""
+        return self.gdb.read_memory_bytes(addr, n, timeout_sec=timeout_sec)
