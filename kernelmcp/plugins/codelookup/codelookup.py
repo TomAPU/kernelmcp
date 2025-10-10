@@ -36,7 +36,7 @@ class CodeLookup(McpPlugin):
     @mcp_tool
     @ensure_db()
     @limit_list(max_items=50)
-    def get_definition(self, symbol: str) -> List[Dict]:
+    def source_get_definition(self, symbol: str) -> List[Dict]:
         """
         Get the definition of a symbol from the code database.
         This can be used to query functions, structs, macros, variables, etc.
@@ -46,7 +46,7 @@ class CodeLookup(McpPlugin):
     @mcp_tool
     @ensure_db()
     @limit_list(max_items=50)
-    def get_reference(self, symbol: str) -> List[Dict]:
+    def source_get_reference(self, symbol: str) -> List[Dict]:
         """
         Get the references of a symbol from the code database.
         This can be used to query functions, structs, macros, variables, etc.
@@ -56,7 +56,7 @@ class CodeLookup(McpPlugin):
     @mcp_tool
     @ensure_db()
     @limit_list(max_items=50)
-    def get_function_range(self, symbol: str) -> List[Dict]:
+    def source_get_function_range(self, symbol: str) -> List[Dict]:
         """
         Get the filename and line range of a function definition from the code database.
         This can be used be comnbined with the get_source tool to retrieve the function's source code.

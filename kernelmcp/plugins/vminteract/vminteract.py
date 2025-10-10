@@ -83,7 +83,7 @@ class VMInteractPlugin(McpPlugin):
             Defaults to "root@syzkaller" (consistent with VMManage default).
 
     Exposed tools:
-        start_vm(timeout_sec: int = 20) -> Dict[str, Any]
+        vm_start(timeout_sec: int = 20) -> Dict[str, Any]
             Start the VM if not already running and wait for the prompt.
             Returns a dict schema:
               {
@@ -141,7 +141,7 @@ class VMInteractPlugin(McpPlugin):
 
     @mcp_tool
     @ensure_vm()
-    def start_vm(self, timeout_sec: int = 20) -> Dict[str, Any]:
+    def vm_start(self, timeout_sec: int = 20) -> Dict[str, Any]:
         """
         Start the virtual machine
         """
@@ -149,7 +149,7 @@ class VMInteractPlugin(McpPlugin):
 
     @mcp_tool
     @ensure_vm()
-    def restart_vm(self, timeout_sec: int = 20) -> Dict[str, Any]:
+    def vm_restart(self, timeout_sec: int = 20) -> Dict[str, Any]:
         """
         Restart the virtual machine. Use when the virtual machine is halted or unresponsive.
         """
@@ -170,12 +170,19 @@ class VMInteractPlugin(McpPlugin):
     @mcp_tool
     @ensure_vm()
     @ensure_vm_not_halted()
-    def exec_cmd(self, cmd: str, timeout_sec: int = 20) -> Dict[str, Any]:
+    def vm_exec_cmd(self, cmd: str, timeout_sec: int = 20) -> Dict[str, Any]:
         """
         Execute a command in the virtual machine and return its output.
         This is a high-level primitive, more suitable for simple commands (such as viewing configurations in the virtual machine via cat).
+        DO NOT use this tool for interactive commands (such as vim, top, etc) or commands that may hit breakpoints.
         Use this tool only when the virtual machine is running.
         """
+        # Blacklist commands that contains "\n"
+        if "\n" in cmd:
+            return {
+                "success": False,
+                "reason": "Multi-line commands are not supported. Please use vm_sendline and vm_receive for interactive commands.",
+            }
         ret = self.vm.exec_cmd(cmd, timeout_sec=timeout_sec)
         if ret["reason"] == "Timeout" and self.gdb.get_state() == "stopped":
             ret["reason"] = "The virtual machine is halted after executing the command. It's possible that we hit a breakpoint."
@@ -247,7 +254,7 @@ class VMInteractPlugin(McpPlugin):
     @mcp_tool
     @ensure_vm()
     @ensure_vm_not_halted()
-    def compile_c_and_upload(self, code: str, dest_path: str, flags: Optional[list[str]] = None) -> Dict[str, Any]:
+    def vm_compile_c_and_upload(self, code: str, dest_path: str, flags: Optional[list[str]] = None) -> Dict[str, Any]:
         """
         Compile given C code into a binary using gcc, then upload it to the virtual machine.
         Use this tool only when the virtual machine is running.
@@ -311,6 +318,16 @@ class VMInteractPlugin(McpPlugin):
         Execute a GDB command and return the result.
         """
         return self.gdb.send(cmd, timeout_sec=timeout_sec)
+
+    @mcp_tool
+    @ensure_gdb()
+    def gdb_wait_for_stop(self, timeout_sec: float = 5.0) -> Dict[str, Any]:
+        """
+        Block until a '*stopped' async notify is observed (e.g., breakpoint hit/step/signal).
+        Returns {"ok": True, "stop": {...}} or {"ok": False, "error": "timeout"}.
+        This is super useful after sendline() or continue_execution() to wait until the VM halts.
+        """
+        return self.gdb.wait_for_stop(timeout_sec=timeout_sec)
     # ---------- GDB MI execution control ----------
 
     @mcp_tool

@@ -37,7 +37,7 @@ class SourceViewPlugin(McpPlugin):
 
     @mcp_tool
     @ensure_sv()
-    def get_source(self, source_path: str, start: int, end: int) -> Dict:
+    def source_get_code(self, source_path: str, start: int, end: int) -> Dict:
         """
         Retrieve source code from a file between start and end lines (1-based, inclusive).
         The returned "code" field includes line numbers.
@@ -50,7 +50,7 @@ class SourceViewPlugin(McpPlugin):
 
     @mcp_tool
     @ensure_sv()
-    def get_source_folder(self) -> str:
+    def source_get_root_folder(self) -> str:
         """
         Return the root of the source code folder path to help code browsing.
         """
@@ -58,7 +58,7 @@ class SourceViewPlugin(McpPlugin):
 
     @mcp_tool
     @ensure_sv()
-    def search(self, pattern: str, regex: bool, root_dir: Optional[str] = None) -> List[Dict]:
+    def source_search(self, pattern: str, regex: bool, root_dir: Optional[str] = None) -> List[Dict]:
         """
         Search for a text pattern in the kernel source code.
         Returns file path, line number, and the matching line.
@@ -75,7 +75,7 @@ class SourceViewPlugin(McpPlugin):
 
     @mcp_tool
     @ensure_sv()
-    def list_files(self, rel_dir: str = ".") -> List[Dict]:
+    def source_list_files(self, rel_dir: str = ".") -> List[Dict]:
         """
         List files under a directory (relative to source root) in the *host machine* (NOT the virtual machine).
         Shows file path and size in bytes.
