@@ -19,7 +19,7 @@ class RemoteGdbMI:
         self,
         binary_path: str,
         port: Union[int, str],
-        *,
+        gdboutput: str = "",
         logger: Optional[logging.Logger] = None,
     ) -> None:
         self.logger = logger or logging.getLogger(__name__)
@@ -53,6 +53,11 @@ class RemoteGdbMI:
 
         # Disable colors
         self.send("gef config theme.disable True", timeout_sec=2.0)
+
+        # GDB logging
+        if gdboutput:
+            self.send(f"set logging file {gdboutput}", timeout_sec=2.0)
+            self.send("set logging on", timeout_sec=2.0)
 
         # Start background poller to consume async MI notifications (e.g., *stopped)
         self._bg_thread = threading.Thread(

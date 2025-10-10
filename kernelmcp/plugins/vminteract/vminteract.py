@@ -110,6 +110,7 @@ class VMInteractPlugin(McpPlugin):
         ezqm_dir = self.config.data.get("ezqmlocalfolder", "").strip()
         vmprompt = self.config.data.get("vmprompt", "")
         vmoutput = self.config.data.get("vmoutput", "")
+        gdboutput = self.config.data.get("gdboutput", "")
 
         if not ezqm_dir:
             self.logger.warning(
@@ -138,7 +139,7 @@ class VMInteractPlugin(McpPlugin):
             self.logger.info(
                 f"{self.NAME} plugin initialized with GDB port: {gdbport} and vmlinux: {vmlinux}")
             self.gdb = RemoteGdbMI(binary_path=vmlinux,
-                                   port=gdbport, logger=self.logger)
+                                   port=gdbport, gdboutput=gdboutput, logger=self.logger)
 
     @mcp_tool
     @ensure_vm()
@@ -165,7 +166,7 @@ class VMInteractPlugin(McpPlugin):
             gdbport = self.vm.localconf.get("gdbport", 0)
             vmlinux = self.vm.localconf.get("vmlinux", "")
             self.gdb = RemoteGdbMI(binary_path=vmlinux,
-                                   port=gdbport, logger=self.logger)
+                                   port=gdbport, gdboutput=gdboutput, logger=self.logger)
         return {"success": True, "reason": ""}
 
     @mcp_tool
