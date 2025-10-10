@@ -55,6 +55,7 @@ class VMManage:
         promptstr: str = "",
         ezqmlocalfolder: str = ".",
         logger: Optional[logging.Logger] = None,
+        vmoutput: str = "",
     ):
         self.prompt: str = promptstr
         if not self.prompt:
@@ -64,6 +65,7 @@ class VMManage:
         self.logger = logger or logging.getLogger(__name__)
         self.START_MARKER = "__EZQM_CMD_START__"
         self.STOP_MARKER = "__EZQM_CMD_END__"
+        self.vmoutput = vmoutput
         if not self.logger.handlers:
             self.logger.addHandler(logging.NullHandler())
 
@@ -95,8 +97,15 @@ class VMManage:
             encoding="utf-8",
             echo=False,
         )
-        # Wire VM output to logger.info
-        child.logfile = _LoggerWriter(self.logger)
+        if self.vmoutput:
+            try:
+                logfile_path = Path(self.vmoutput)
+                logfile_path.parent.mkdir(parents=True, exist_ok=True)
+                child.logfile = open(logfile_path, "a", encoding="utf-8")
+                self.logger.info(
+                    f"VM output is being logged to {logfile_path}")
+            except Exception as e:
+                self.logger.error(f"Failed to open VM output log file: {e}")
         self._child = child
 
     def _wait_for_prompt(self, timeout_sec: int) -> bool:
