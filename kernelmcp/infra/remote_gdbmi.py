@@ -52,7 +52,7 @@ class RemoteGdbMI:
             self._mi(mi, timeout_sec=2.0)
 
         # Disable colors
-        self.send("gef config theme.disable True", timeout_sec=2.0)
+        self.send("gef config gef.disable_color True", timeout_sec=2.0)
 
         # GDB logging
         if gdboutput:
