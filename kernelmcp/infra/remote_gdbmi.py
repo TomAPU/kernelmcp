@@ -177,7 +177,7 @@ class RemoteGdbMI:
         try:
             with self._io_lock:
                 out = self.gdb.write(mi_cmd, timeout_sec=timeout_sec)
-            self._ingest_state(out)
+                self._ingest_state(out)
             ok, err = _evaluate_success(out)
             response = ""
             for r in out:
@@ -227,12 +227,13 @@ class RemoteGdbMI:
             try:
                 with self._io_lock:
                     out = self.gdb.get_gdb_response(
-                        timeout_sec=0.5, raise_error_on_timeout=False)
-                if out:
-                    self._ingest_state(out)
+                        timeout_sec=0.1, raise_error_on_timeout=False)
+                    if out:
+                        self._ingest_state(out)
             except Exception as e:
                 self.logger.error(f"Background poll error: {e}")
-                time.sleep(0.5)
+            # Avoid busy loop
+            time.sleep(0.5)
 
     def __del__(self) -> None:
         try:
