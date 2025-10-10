@@ -51,7 +51,10 @@ class RemoteGdbMI:
         for mi in ("-gdb-set pagination off", "-gdb-set confirm off", "-gdb-set mi-async on"):
             self._mi(mi, timeout_sec=2.0)
 
-        # start background poller to consume async MI notifications (e.g., *stopped)
+        # Disable colors
+        self.send("gef config theme.disable True", timeout_sec=2.0)
+
+        # Start background poller to consume async MI notifications (e.g., *stopped)
         self._bg_thread = threading.Thread(
             target=self._bg_loop, name="RemoteGdbMI-bg", daemon=True
         )
@@ -219,12 +222,12 @@ class RemoteGdbMI:
             try:
                 with self._io_lock:
                     out = self.gdb.get_gdb_response(
-                        timeout_sec=0.1, raise_error_on_timeout=False)
+                        timeout_sec=0.5, raise_error_on_timeout=False)
                 if out:
                     self._ingest_state(out)
             except Exception as e:
                 self.logger.error(f"Background poll error: {e}")
-                time.sleep(0.1)
+                time.sleep(0.5)
 
     def __del__(self) -> None:
         try:
