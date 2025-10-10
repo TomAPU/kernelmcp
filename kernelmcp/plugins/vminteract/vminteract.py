@@ -109,8 +109,8 @@ class VMInteractPlugin(McpPlugin):
         # Read config
         ezqm_dir = self.config.data.get("ezqmlocalfolder", "").strip()
         vmprompt = self.config.data.get("vmprompt", "")
-        vmoutput = self.config.data.get("vmoutput", "")
-        gdboutput = self.config.data.get("gdboutput", "")
+        self.vmoutput = self.config.data.get("vmoutput", "")
+        self.gdboutput = self.config.data.get("gdboutput", "")
 
         if not ezqm_dir:
             self.logger.warning(
@@ -120,7 +120,7 @@ class VMInteractPlugin(McpPlugin):
 
         try:
             self.vm = VMManage(
-                promptstr=vmprompt, ezqmlocalfolder=ezqm_dir, logger=self.logger, vmoutput=vmoutput)
+                promptstr=vmprompt, ezqmlocalfolder=ezqm_dir, logger=self.logger, vmoutput=self.vmoutput)
             self.logger.info(
                 f"{self.NAME} plugin initialized with ezqm folder: {ezqm_dir}")
         except FileNotFoundError as e:
@@ -139,7 +139,7 @@ class VMInteractPlugin(McpPlugin):
             self.logger.info(
                 f"{self.NAME} plugin initialized with GDB port: {gdbport} and vmlinux: {vmlinux}")
             self.gdb = RemoteGdbMI(binary_path=vmlinux,
-                                   port=gdbport, gdboutput=gdboutput, logger=self.logger)
+                                   port=gdbport, gdboutput=self.gdboutput, logger=self.logger)
 
     @mcp_tool
     @ensure_vm()
@@ -166,7 +166,7 @@ class VMInteractPlugin(McpPlugin):
             gdbport = self.vm.localconf.get("gdbport", 0)
             vmlinux = self.vm.localconf.get("vmlinux", "")
             self.gdb = RemoteGdbMI(binary_path=vmlinux,
-                                   port=gdbport, gdboutput=gdboutput, logger=self.logger)
+                                   port=gdbport, gdboutput=self.gdboutput, logger=self.logger)
         return {"success": True, "reason": ""}
 
     @mcp_tool
