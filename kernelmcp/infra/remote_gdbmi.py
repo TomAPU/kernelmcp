@@ -188,7 +188,7 @@ class RemoteGdbMI:
             response = ""
             additional_info = []
             for r in out:
-                if "payload" not in r:
+                if not r.get("payload"):
                     continue
                 if isinstance(r.get("payload"), str):
                     response += r["payload"]
