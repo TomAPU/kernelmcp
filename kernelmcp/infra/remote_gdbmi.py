@@ -198,28 +198,16 @@ class RemoteGdbMI:
                     with self._cv:
                         self._state = "running"
                         self._cv.notify_all()
-                    self._fire_event({"message": "running"})
                 elif msg == "stopped":
                     stop = _parse_stopped_record(r)
                     with self._cv:
                         self._state = "stopped"
                         self._last_stop = stop
                         self._cv.notify_all()
-                    self._fire_event({"message": "stopped", "stop": stop})
                 elif msg == "thread-group-exited":
                     with self._cv:
                         self._state = "exited"
                         self._cv.notify_all()
-                    self._fire_event(
-                        {"message": "thread-group-exited", "payload": r.get("payload")})
-
-    def _fire_event(self, evt: Dict[str, Any]) -> None:
-        cb = self._event_callback
-        if cb:
-            try:
-                cb(copy.deepcopy(evt))
-            except Exception as e:
-                self.logger.error(f"event callback error: {e}")
 
     def _bg_loop(self) -> None:
         """Background poller for async MI notifications."""
