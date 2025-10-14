@@ -189,10 +189,7 @@ class VMInteractPlugin(McpPlugin):
                 "success": False,
                 "reason": "Multi-line commands are not supported. Please use vm_sendline and vm_receive for interactive commands.",
             }
-        ret = self.vm.exec_cmd(cmd, timeout_sec=timeout_sec)
-        if ret["reason"] == "Timeout" and self.gdb.get_state() == "stopped":
-            ret["reason"] = "The virtual machine is halted after executing the command. It's possible that we hit a breakpoint."
-        return ret
+        return self.vm.exec_cmd(cmd, timeout_sec=timeout_sec)
 
     @mcp_tool
     @ensure_vm()
