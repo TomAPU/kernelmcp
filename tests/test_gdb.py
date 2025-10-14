@@ -133,17 +133,19 @@ def test_gdbserver_connect(gdbserver):
 
     try:
         res = gdb.connect(timeout_sec=5.0)
+        # require connect succeeded
         assert isinstance(res, dict)
-        if res.get("ok"):
-            assert gdb.is_connected
-            state = gdb.get_state()
-            assert isinstance(state, dict)
-            assert state["status"] in {"stopped", "running", "idle"}
-            bt = gdb.get_backtrace_mi(timeout_sec=5.0)
-            assert isinstance(bt, dict)
-            assert bt.get("ok"), f"backtrace failed: {bt.get('error')}"
-        else:
-            assert res.get("error") is not None
+        assert res.get("ok") is True, f"connect failed: {res.get('error')}"
+        assert gdb.is_connected
+        state = gdb.get_state()
+        assert isinstance(state, dict)
+        assert state["status"] == "stopped", f"unexpected state: {state}"
+        bt = gdb.get_backtrace_mi(timeout_sec=5.0)
+        assert isinstance(bt, dict)
+        assert bt.get("ok"), f"backtrace failed: {bt.get('error')}"
+        # Ensure backtrace returned some useful payload (textual or structured)
+        assert bt.get("response") or bt.get(
+            "additional_info"), f"backtrace missing payload: {bt}"
     finally:
         gdb.close()
 
@@ -168,14 +170,36 @@ def test_gdb_break_and_eval_then_exit(gdbserver):
         rstop = gdb.wait_for_stop(timeout_sec=5.0)
         assert rstop.get("ok"), f"wait_for_stop (main) failed: {rstop}"
         # we expect to have hit the breakpoint at main
-        assert (rstop.get("stop") or {}).get(
+        stop = rstop.get("stop") or {}
+        assert stop.get(
             "reason") == "breakpoint-hit", f"unexpected stop: {rstop}"
+        # ensure breakpoint info present and has numeric id when possible
+        bp = stop.get("breakpoint")
+        assert isinstance(bp, dict), f"missing breakpoint info: {stop!r}"
+        assert "number" in bp
+        try:
+            _ = int(bp.get("number"))
+        except Exception:
+            pytest.fail(
+                f"breakpoint number not integer-convertible: {bp.get('number')!r}")
 
         # Evaluate an expression using CLI so textual response is present
         pres = gdb.send("print 3+4", timeout_sec=3.0)
         assert pres["ok"], f"print failed: {pres.get('error')}"
         assert "7" in (pres.get(
             "response") or ""), f"Expected '7' in response, got: {pres.get('response')!r}"
+        # Also test MI expression evaluator returns the value (either in response or additional_info)
+        eres = gdb.evaluate_expression("3+4", timeout_sec=3.0)
+        assert eres.get(
+            "ok"), f"evaluate_expression failed: {eres.get('error')}"
+        found = False
+        if "7" in (eres.get("response") or ""):
+            found = True
+        for ai in eres.get("additional_info", []) or []:
+            if any("7" in str(v) for v in ai.values()):
+                found = True
+                break
+        assert found, f"evaluate_expression did not include expected value: {eres}"
 
         # Continue to program end; expect an exit stop
         cont2 = gdb.continue_execution(timeout_sec=5.0)
@@ -201,6 +225,9 @@ def test_cli_send_and_error_path(gdbserver):
         # CLI expression print (GDB console)
         r = gdb.send("p/x 0x34 + 0x9", timeout_sec=3.0)
         assert r["ok"], f"CLI send failed: {r.get('error')}"
+        # 0x34 + 0x9 == 0x3d (61)
+        resp = r.get("response") or ""
+        assert "0x3d" in resp, f"unexpected CLI arithmetic output: {resp!r}"
         # Also try a clearly-bad MI to hit error path
         bad = gdb._mi("-this-command-does-not-exist", timeout_sec=2.0)
         assert not bad["ok"] and bad["error"], "Expected MI error to be surfaced"
@@ -358,9 +385,15 @@ def test_wait_for_stop_breakpoint_hit(gdbserver):
         stop = res.get("stop") or {}
         assert stop.get(
             "reason") == "breakpoint-hit", f"unexpected stop: {stop!r}"
-        # Best-effort sanity: breakpoint info should be present
-        assert stop.get(
-            "breakpoint") is not None, f"missing breakpoint info: {stop!r}"
+        # Best-effort sanity: breakpoint info should be present and numeric
+        bp = stop.get("breakpoint")
+        assert isinstance(bp, dict), f"missing breakpoint info: {stop!r}"
+        assert "number" in bp
+        try:
+            _ = int(bp.get("number"))
+        except Exception:
+            pytest.fail(
+                f"breakpoint number not integer-convertible: {bp.get('number')!r}")
 
         # Cleanly continue to program exit for teardown hygiene
         cont2 = gdb.continue_execution(timeout_sec=5.0)
