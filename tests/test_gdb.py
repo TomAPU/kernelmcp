@@ -136,8 +136,9 @@ def test_gdbserver_connect(gdbserver):
         assert isinstance(res, dict)
         if res.get("ok"):
             assert gdb.is_connected
-            # After connect, state should be known and a simple MI should succeed
-            assert gdb.get_state() in {"stopped", "running", "idle"}
+            state = gdb.get_state()
+            assert isinstance(state, dict)
+            assert state["status"] in {"stopped", "running", "idle"}
             bt = gdb.get_backtrace_mi(timeout_sec=5.0)
             assert isinstance(bt, dict)
             assert bt.get("ok"), f"backtrace failed: {bt.get('error')}"

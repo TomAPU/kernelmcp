@@ -92,7 +92,11 @@ class RemoteGdbMI:
         """
         Get current state: "idle", "running", "stopped", "exited"
         """
-        return self._state
+        with self._io_lock:
+            state = self._state
+            if state == "stopped":
+                return {"status": state, "note": copy.deepcopy(self._last_stop)}
+            return {"status": state, "note": None}
 
     @property
     def is_connected(self) -> bool:
@@ -157,16 +161,18 @@ class RemoteGdbMI:
         deadline = (time.monotonic() +
                     timeout_sec) if timeout_sec is not None else None
         with self._cv:
-            if self._state == "stopped" and self._last_stop is not None:
-                return {"ok": True, "stop": copy.deepcopy(self._last_stop)}
+            with self._io_lock:
+                if self._state == "stopped" and self._last_stop is not None:
+                    return {"ok": True, "stop": copy.deepcopy(self._last_stop)}
             while True:
                 remaining = None if deadline is None else max(
                     0.0, deadline - time.monotonic())
                 if remaining == 0.0:
                     return {"ok": False, "error": "timeout"}
                 self._cv.wait(timeout=remaining)
-                if self._state == "stopped" and self._last_stop is not None:
-                    return {"ok": True, "stop": copy.deepcopy(self._last_stop)}
+                with self._io_lock:
+                    if self._state == "stopped" and self._last_stop is not None:
+                        return {"ok": True, "stop": copy.deepcopy(self._last_stop)}
                 if deadline is not None and time.monotonic() >= deadline:
                     return {"ok": False, "error": "timeout"}
 
