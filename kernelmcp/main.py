@@ -57,6 +57,13 @@ def main():
         default=3125,
         help="HTTP port to bind (default: 3125)",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging",
+    )
+
     args = parser.parse_args()
 
     config = Config(args.config)
@@ -65,7 +72,10 @@ def main():
     logger = logging.getLogger("KernelMCP")
     logger.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
+    if not args.verbose:
+        ch.setLevel(logging.INFO)
+    else:
+        ch.setLevel(logging.DEBUG)
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     ch.setFormatter(formatter)
