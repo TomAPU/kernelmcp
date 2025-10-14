@@ -222,6 +222,9 @@ class RemoteGdbMI:
                     with self._cv:
                         self._state = "exited"
                         self._cv.notify_all()
+                else:
+                    self.logger.error(
+                        "Unhandled notify message: %r", msg)
 
     def _bg_loop(self) -> None:
         """Background poller for async MI notifications."""
