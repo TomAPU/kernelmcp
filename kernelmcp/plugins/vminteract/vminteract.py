@@ -169,7 +169,11 @@ class VMInteractPlugin(McpPlugin):
                                    port=gdbport, gdboutput=self.gdboutput, logger=self.logger)
         return {"success": True, "reason": ""}
 
-    @mcp_tool
+    # It turns out that vm_exec_cmd is too high-level for many scenarios,
+    # especially when debugging kernels with breakpoints. And despite I asked LLM to use it only
+    # for simple commands, it always tried to use it for everything.
+    # So I am deprecating it in favor of vm_sendline + vm_receive, which is lower-level and more flexible.
+    # @mcp_tool
     @ensure_vm()
     @ensure_vm_not_halted()
     def vm_exec_cmd(self, cmd: str, timeout_sec: int = 20) -> Dict[str, Any]:
