@@ -57,7 +57,7 @@ def ensure_vm_not_halted():
         @wraps(func)
         def wrapper(*args, **kwargs):
             self: VMInteractPlugin = args[0]
-            if getattr(self, 'gdb', None) and self.gdb.get_state() in halted_states:
+            if getattr(self, 'gdb', None) and self.gdb.get_state()["status"] in halted_states:
                 return {
                     "success": False,
                     "reason": "The virtual machine is halted. You may want to resume it in GDB before using this tool.",
@@ -297,11 +297,11 @@ class VMInteractPlugin(McpPlugin):
     # ---------- GDB-related tools ----------
     @mcp_tool
     @ensure_gdb()
-    def gdb_get_state(self) -> str:
+    def gdb_get_vm_state(self) -> str:
         """
-        Get current GDB state: "idle", "running", "stopped", "exited"
-        If GDB is not connected, returns "idle".
-        Note: the stopped state may indicate the VM is halted (e.g. at a breakpoint).
+        Leverage GDB to get the current state of the virtual machine.
+        Returns: {"status": str, "note": Optional[Dict]} 
+        where status is one of "idle", "running", "stopped", "exited". (If "stopped", note contains details about the stop. Likely a breakpoint hit.)
         """
         return self.gdb.get_state()
 
