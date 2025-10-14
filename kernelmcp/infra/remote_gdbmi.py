@@ -186,12 +186,20 @@ class RemoteGdbMI:
                 self._ingest_state(out)
             ok, err = _evaluate_success(out)
             response = ""
+            additional_info = []
             for r in out:
-                if "payload" in r and isinstance(r.get("payload"), str):
+                if "payload" not in r:
+                    continue
+                if isinstance(r.get("payload"), str):
                     response += r["payload"]
+                elif isinstance(r.get("payload"), dict):
+                    additional_info.append(copy.deepcopy(r["payload"]))
+                else:
+                    self.logger.error(
+                        "Unexpected payload type for _mi payload: %r", r)
             self.logger.debug(
-                "cmd=%r, ok=%s, error=%s, records=%s", mi_cmd, ok, err, out)
-            return {"ok": ok, "response": response, "error": err}
+                "cmd=%r, ok=%s, error=%s, records=%s additional_info=%s", mi_cmd, ok, err, out, additional_info)
+            return {"ok": ok, "response": response, "error": err, "additional_info": additional_info}
         except Exception as e:
             self.logger.error("_mi() error for %r: %s", mi_cmd, e)
             return {"ok": False, "response": "", "error": str(e)}

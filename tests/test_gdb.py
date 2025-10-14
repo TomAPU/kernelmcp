@@ -222,6 +222,7 @@ def test_breakpoint_lifecycle_and_listing(gdbserver):
         # List -> should succeed (we no longer parse content)
         bl = gdb.list_breakpoints(timeout_sec=3.0)
         assert bl["ok"], f"break-list failed: {bl.get('error')}"
+        assert bl["additional_info"], "break-list missing additional_info"
         # Best-effort clean-up: attempt to delete breakpoint #1 without asserting
         gdb.delete_breakpoint(1, timeout_sec=3.0)
     finally:
