@@ -255,14 +255,14 @@ wheels = [
 
 [[package]]
 name = "ezqm"
-version = "1.0.3"
+version = "1.0.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pexpect" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/75/c3/d0662086a5966e097acc16213d46e5431c38930bfe5e93e04422b30fafc3/ezqm-1.0.3.tar.gz", hash = "sha256:579b6769667e3ce94e3104f564dc2544a2f72ee8d61e595148f0b9aed08029c3", size = 14163, upload-time = "2025-07-06T01:09:38.292Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/f3/44e4de1ef8d837d458b1ec94a174b907e2523ed36f2cbfa9ccb0ac4d1649/ezqm-1.0.4.tar.gz", hash = "sha256:d14ade19ddcfa7fe1671dd596a1379a50fd504176b2dd51cd9520d9045565601", size = 14131, upload-time = "2025-10-16T19:05:01.723Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/b2/3fc939bb13dbaf52c9cb7d91b149b1abefc9f6bd5b332f09ee926ffe5be6/ezqm-1.0.3-py3-none-any.whl", hash = "sha256:7430cfaba1755e7b6b71b1e33e058225914ba7347f986cd8e009e5f012a4cac1", size = 14190, upload-time = "2025-07-06T01:09:36.86Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/91/2d2ea7206e53c2d06750b2b76a117db643b9af7e952c855684a88e296dc8/ezqm-1.0.4-py3-none-any.whl", hash = "sha256:1da98f8e6dc25c7760d393a78055f5345499f819d05614d9752cb1b54a14b8a0", size = 14189, upload-time = "2025-10-16T19:05:00.667Z" },
 ]
 
 [[package]]
@@ -419,7 +419,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ezqm", specifier = ">=1.0.3" },
+    { name = "ezqm", specifier = "==1.0.4" },
     { name = "fastmcp", specifier = ">=2.12.2" },
     { name = "pygdbmi", specifier = ">=0.11.0.0" },
 ]
