@@ -1,27 +1,3 @@
-# -------- Build stage for fresh LLVM/clang/clangd-indexer -------------
-FROM ubuntu:24.04 AS llvm-build
-ARG DEBIAN_FRONTEND=noninteractive
-ARG LLVM_VER=15.0.7
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    git cmake ninja-build build-essential python3 ca-certificates curl && \
-    rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch llvmorg-${LLVM_VER} https://github.com/llvm/llvm-project.git /tmp/llvm-project
-# Build shared libs and install everything to /opt/llvm
-RUN cmake -S /tmp/llvm-project/llvm -B /tmp/llvm-build -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DLLVM_TARGETS_TO_BUILD="X86" \
-    -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld" \
-    -DLLVM_BUILD_LLVM_DYLIB=ON \
-    -DLLVM_LINK_LLVM_DYLIB=ON \
-    -DCLANG_LINK_CLANG_DYLIB=ON \
-    -DLLVM_INSTALL_UTILS=ON \
-    -DCMAKE_INSTALL_PREFIX=/opt/llvm \
-    && ninja -C /tmp/llvm-build -j$(nproc) install \
-    && cp --update=none /tmp/llvm-build/bin/* /opt/llvm/bin/ \
-    && test -x /opt/llvm/bin/clangd-indexer
-
-# ---------------- Main image ----------------
 FROM ubuntu:24.04
 
 # Arguments for creating user
@@ -59,12 +35,11 @@ RUN apt-get update && \
     debootstrap cmake wget libmpfr-dev libdw-dev \
     qemu-system-x86 qemu-utils qemu-kvm qemu-system-aarch64 openssh-client \
     libvirt-daemon-system libvirt-clients bridge-utils \
+    clang-15 lld-15 llvm-15 llvm-15-dev libclang-15-dev libc++-15-dev libc++abi-15-dev \
     jq unzip cscope codequery universal-ctags ripgrep \
     gdbserver \
     && rm -rf /var/lib/apt/lists/*
 
-# -------- NEW: bring in the freshly built LLVM/Clang/clangd-indexer --------
-COPY --from=llvm-build /opt/llvm /opt/llvm
 # Make sure the loader can find the fresh shared libraries
 RUN echo "/opt/llvm/lib" > /etc/ld.so.conf.d/llvm-15.conf && ldconfig
 
@@ -105,9 +80,19 @@ RUN if getent group kvm >/dev/null; then \
     usermod -a -G kvm ${USERNAME} || true && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# Add ~/.local/bin and /opt/llvm/bin to PATH in interactive shells too
+# Add ~/.local/bin to PATH in interactive shells too
 RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/${USERNAME}/.bashrc && \
-    echo 'export PATH="/opt/llvm/bin:$PATH"' >> /home/${USERNAME}/.bashrc
+    mkdir -p "/home/${USERNAME}/.local/bin"
+
+# Beta24 GDB Installation
+# The chmod +x will be executed after creation of the gdb wrapper script, the heredoc is magic!
+RUN wget -q https://raw.githubusercontent.com/bata24/gef/dev/install-uv.sh -O- | sudo sh && \
+    cat > "/home/${USERNAME}/.local/bin/gdb" <<'EOF' && \
+chmod +x "/home/${USERNAME}/.local/bin/gdb"
+#!/bin/sh
+exec sudo -i /usr/bin/gdb "$@"
+EOF
+
 
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
