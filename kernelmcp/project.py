@@ -80,6 +80,20 @@ def main() -> Optional[argparse.Namespace]:
     if any(c in project_name for c in [".", "/", "\\"]):
         logger.error("Project name contains forbidden characters ('.' or '/')")
         sys.exit(2)
+    logger.info("Project name: %s", project_name)
+
+    # Create project folder
+    project_path = os.path.join("project", project_name)
+    if not os.path.exists("project"):
+        os.makedirs("project")
+    if os.path.exists(project_path):
+        logger.error(
+            "Project folder 'project/%s' already exists. Please delete it before re-running.", project_name)
+        sys.exit(3)
+    os.makedirs(project_path)
+    logger.info("Created project folder: project/%s", project_name)
+
+    
 
 
 if __name__ == "__main__":
