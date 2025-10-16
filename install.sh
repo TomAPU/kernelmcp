@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# --- prerequisites ---
+# --- Prerequisites ---
 command -v uv >/dev/null 2>&1 || { echo "[ERROR] 'uv' not found in PATH." >&2; exit 1; }
 command -v codeql >/dev/null 2>&1 || { echo "[ERROR] 'codeql' not found in PATH." >&2; exit 1; }
 
-# --- run uv sync ---
+# --- Run uv sync ---
 if ! uv sync; then
   echo "[ERROR] 'uv sync' failed." >&2
   exit 1
 fi
 
-# --- download CodeQL pack ---
+# --- Download CodeQL pack ---
 if ! codeql pack download codeql/cpp-all; then
   echo "[ERROR] 'codeql pack download codeql/cpp-all' failed." >&2
   exit 1
 fi
 
-# --- syzkaller image creation ---
+# --- Syzkaller image creation ---
 mkdir -p tools/
 mkdir -p tools/diskimage
 
@@ -43,7 +43,7 @@ else
   echo "[INFO] Syzkaller image already exists. Skipping creation."
 fi
 
-# --- setup ezqm ---
+# --- Setup ezqm ---
 echo "[INFO] Setting up ezqm..."
 mkdir -p tools/memsnapshots
 
