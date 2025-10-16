@@ -32,6 +32,24 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def validate_linux_folder(linux_path: str) -> tuple[bool, Optional[str]]:
+    """
+    Check 1) It's a folder
+          2) It contains a Makefile
+          3) It contains a .config file
+          4) It contains a vmlinux file
+    """
+    if not os.path.isdir(linux_path):
+        return "Linux path is not a directory"
+
+    required_files = ["Makefile", ".config", "vmlinux"]
+    missing_files = [f for f in required_files if not os.path.isfile(
+        os.path.join(linux_path, f))]
+    if missing_files:
+        return False, f"Missing required files: {', '.join(missing_files)}, are you sure this is a compiled Linux source folder?"
+    return True, None
+
+
 def main() -> Optional[argparse.Namespace]:
     """Parse arguments and perform a minimal validation.
 
@@ -52,8 +70,9 @@ def main() -> Optional[argparse.Namespace]:
     logger.setLevel(logging.DEBUG if args.verbose else logging.INFO)
 
     linux_path = os.path.abspath(args.linux)
-    if not os.path.isdir(linux_path):
-        logger.error("Provided linux path is not a directory: %s", linux_path)
+    is_valid, error_message = validate_linux_folder(linux_path)
+    if not is_valid:
+        logger.error("Invalid Linux source folder: %s", error_message)
     else:
         logger.info("Using Linux source folder: %s", linux_path)
 
