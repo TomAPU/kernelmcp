@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-IMAGE_NAME="kernelmcp"
-CONTAINER_NAME="kernelmcp-dev"
+# Make sure that everyone 
+USERNAME="$(id -un)"
+IMAGE_NAME="kernelmcp-${USERNAME}"
+CONTAINER_NAME="kernelmcp-devcontainer-${USERNAME}"
 HOST_PORT=3125
 ADDITIONAL_FOLDER=""
 PERMANENT=false
@@ -53,7 +54,6 @@ fi
 # --- Ensure image exists ---
 if ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
   echo "Image '${IMAGE_NAME}' not found. Building..."
-  USERNAME="$(id -un)"
   MY_UID="$(id -u)"
   MY_GID="$(id -g)"
   if [[ -e /dev/kvm ]]; then
