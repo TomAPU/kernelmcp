@@ -1,12 +1,12 @@
 # KernelMCP Dev Container Script
 
 This script builds and runs a development container for **KernelMCP** using Docker.
-It simplifies managing the `kernelmcp-dev` container with options for port mapping, volume mounts, and persistent or temporary containers.
+It simplifies managing the `kernelmcp-devcontainer-<your username>` container with options for port mapping, volume mounts, and persistent or temporary containers.
 
 ## Features
 
 * Automatically builds the Docker image (`kernelmcp`) if it does not exist.
-* Runs a privileged container named `kernelmcp-dev`.
+* Runs a privileged container named `kernelmcp-devcontainer-<your username>`
 * Mounts the current working directory into `/kernelmcp` inside the container.
 * Optionally mounts an additional folder.
 * Supports two modes:
@@ -42,25 +42,25 @@ It simplifies managing the `kernelmcp-dev` container with options for port mappi
 Run in default mode (temporary, auto-removed):
 
 ```bash
-./run-dev.sh
+./rundevcontainer.sh
 ```
 
 Run on a custom port:
 
 ```bash
-./run-dev.sh --port 4000
+./rundevcontainer.sh --port 4000
 ```
 
 Run with an extra folder mounted:
 
 ```bash
-./run-dev.sh -f ./my_data
+./rundevcontainer.sh -f ./my_data
 ```
 
 Run in permanent mode:
 
 ```bash
-./run-dev.sh --permanent
+./rundevcontainer.sh -pm
 ```
 
 ---
