@@ -222,6 +222,23 @@ def main() -> Optional[argparse.Namespace]:
     generate_cqdb(linux_path, project_path, logger)
     logger.info("Project setup complete.")
 
+    # Create config.json in project folder
+    config_path = os.path.join(project_path, "config.json")
+    config_data = {
+        "db_path": os.path.join(project_path, "linux.cqdb"),
+        "code_path": linux_path,
+        "ezqmlocalfolder": project_path,
+        "vmoutput": os.path.join(project_path, "vmoutput"),
+        "gdboutput": os.path.join(project_path, "gdboutput"),
+    }
+
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=2)
+        logger.info("Created config.json at %s", config_path)
+    except Exception as e:
+        logger.error("Failed to create config.json: %s", e)
+
 
 if __name__ == "__main__":
     main()
