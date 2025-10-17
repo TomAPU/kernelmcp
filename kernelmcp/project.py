@@ -6,7 +6,75 @@ import sys
 from typing import Optional
 from kernelmcp.infra.utils import run_cmd
 import shutil
+import json
 from pathlib import Path
+
+
+def initialize_ezqm_project(project_path: str, linux_path: str, logger: logging.Logger) -> None:
+    """
+    Initialize EZQM local environment inside the project folder.
+
+    Steps:
+      1. cd to project folder
+      2. run 'ezcf --init-local <linux_path>'
+      3. run 'ezqm -b'
+      4. run 'ezcf -l -r' and move snapshot_file into project folder
+      5. run 'ezcf -l -u snapshot_file <new_path>'
+    """
+    project_path = os.path.abspath(project_path)
+    linux_path = os.path.abspath(linux_path)
+
+    if not os.path.isdir(project_path):
+        logger.error("Project folder not found: %s", project_path)
+        return
+    if not os.path.isdir(linux_path):
+        logger.error("Linux source folder not found: %s", linux_path)
+        return
+
+    logger.info("Initializing EZQM local environment in %s", project_path)
+
+    # Step 1: ezcf --init-local
+    init_cmd = ["ezcf", "--init-local", linux_path]
+    logger.info("Running ezcf initialization: %s", " ".join(init_cmd))
+    run_cmd(init_cmd, logger=logger, cwd=project_path)
+
+    # Step 2: ezqm -b
+    build_cmd = ["ezqm", "-b"]
+    logger.info("Running ezqm build: %s", " ".join(build_cmd))
+    run_cmd(build_cmd, logger=logger, cwd=project_path)
+
+    # Step 3: ezcf -l -r to read snapshot_file
+    list_cmd = ["ezcf", "-l", "-r"]
+    logger.info("Retrieving snapshot information: %s", " ".join(list_cmd))
+    result = run_cmd(list_cmd, logger=logger, cwd=project_path)
+
+    try:
+        info = json.loads(result)
+        snapshot_file = info.get("snapshot_file")
+    except Exception as e:
+        logger.error("Failed to parse ezcf -l -r output as JSON: %s", e)
+        return
+
+    if not snapshot_file or not os.path.isfile(snapshot_file):
+        logger.error("snapshot_file not found or invalid: %s", snapshot_file)
+        return
+
+    # Step 4: move snapshot file into project folder
+    new_snapshot_path = os.path.join(
+        project_path, os.path.basename(snapshot_file))
+    try:
+        shutil.move(snapshot_file, new_snapshot_path)
+        logger.info("Moved snapshot_file → %s", new_snapshot_path)
+    except Exception as e:
+        logger.error("Failed to move snapshot_file: %s", e)
+        return
+
+    # Step 5: ezcf -l -u snapshot_file <new_path>
+    update_cmd = ["ezcf", "-l", "-u", "snapshot_file", new_snapshot_path]
+    logger.info("Updating snapshot_file path: %s", " ".join(update_cmd))
+    run_cmd(update_cmd, logger=logger, cwd=project_path)
+
+    logger.info("EZQM project fully initialized with updated snapshot path.")
 
 
 def generate_cqdb(linux_path: str, project_path: str, logger: logging.Logger) -> None:
@@ -147,6 +215,10 @@ def main() -> Optional[argparse.Namespace]:
         sys.exit(3)
     os.makedirs(project_path)
     logger.info("Created project folder: project/%s", project_name)
+
+    # Initialize EZQM project
+    initialize_ezqm_project(project_path, linux_path, logger)
+    # Generate CodeQuery database
     generate_cqdb(linux_path, project_path, logger)
     logger.info("Project setup complete.")
 
