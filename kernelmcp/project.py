@@ -4,6 +4,61 @@ import os
 import re
 import sys
 from typing import Optional
+from kernelmcp.infra.utils import run_cmd
+import shutil
+from pathlib import Path
+
+
+def generate_cqdb(linux_path: str, project_path: str, logger: logging.Logger) -> None:
+    """
+    Generate a CodeQuery database (linux.cqdb) from a compiled Linux source tree.
+
+    Steps:
+      1. Check if .config mentions 'clang'
+      2. Run 'make (LLVM=1 if clang) COMPILED_SOURCE=1 cscope tags'
+      3. Run 'cqmakedb -s linux.cqdb -c cscope.out -t tags -p'
+      4. Clean up temporary files and move linux.cqdb to project folder
+    """
+    # 1. Detect clang
+    use_llvm = "clang" in open(os.path.join(
+        linux_path, ".config"), "r", encoding="utf-8").read()
+
+    if use_llvm:
+        logger.info("Detected 'clang' in .config — enabling LLVM=1 for make.")
+    else:
+        logger.info("No 'clang' detected — building without LLVM=1.")
+
+    # 2. make cscope + tags
+    make_cmd = ["make"]
+    if use_llvm:
+        make_cmd.append("LLVM=1")
+    nproc = os.cpu_count()
+    make_cmd += ["COMPILED_SOURCE=1", "cscope", "tags", f"-j{nproc}"]
+
+    logger.info("Running make: %s", " ".join(make_cmd))
+    run_cmd(make_cmd, logger=logger, cwd=linux_path)
+
+    # 3. cqmakedb
+    cqdb_file = os.path.join(project_path, "linux.cqdb")
+    cq_cmd = [
+        "cqmakedb",
+        "-s", str(cqdb_file),
+        "-c", "cscope.out",
+        "-t", "tags",
+        "-p"
+    ]
+    logger.info("Running cqmakedb to generate %s", cqdb_file)
+    run_cmd(cq_cmd, logger=logger, cwd=linux_path)
+
+    # 4. Cleanup temporary files
+    for fname in ["cscope.out", "tags"]:
+        f = os.path.join(linux_path, fname)
+        if os.path.exists(f):
+            try:
+                os.remove(f)
+                logger.debug("Removed temporary file: %s", f)
+            except Exception as e:
+                logger.warning("Failed to remove %s: %s", f, e)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -83,7 +138,7 @@ def main() -> Optional[argparse.Namespace]:
     logger.info("Project name: %s", project_name)
 
     # Create project folder
-    project_path = os.path.join("project", project_name)
+    project_path = os.path.abspath(os.path.join("project", project_name))
     if not os.path.exists("project"):
         os.makedirs("project")
     if os.path.exists(project_path):
@@ -92,8 +147,8 @@ def main() -> Optional[argparse.Namespace]:
         sys.exit(3)
     os.makedirs(project_path)
     logger.info("Created project folder: project/%s", project_name)
-
-    
+    generate_cqdb(linux_path, project_path, logger)
+    logger.info("Project setup complete.")
 
 
 if __name__ == "__main__":
