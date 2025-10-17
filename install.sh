@@ -64,7 +64,7 @@ if ! command -v ezcf >/dev/null 2>&1; then
 fi
 
 # Check if diskimage is already configured in ezqm
-if ezcf -g -r diskimage 2>&1 | grep -q "not found in settings"; then
+if ! ezcf -g -r | grep -q "snapshot"; then
   echo "[INFO] ezqm diskimage not configured. Setting it up..."
 
   # Get absolute paths for image and SSH key
