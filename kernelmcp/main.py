@@ -67,6 +67,9 @@ def main():
     args = parser.parse_args()
 
     config = Config(args.config)
+    if not config.data:
+        print("ERROR: No valid configuration loaded, exiting.")
+        return
     mcp = FastMCP(name="Kernel MCP")
 
     logger = logging.getLogger("KernelMCP")
