@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="930" height="240" viewBox="0 0 930 240" role="img" aria-label="kernelmcp hazard-cipher logo">
+  <defs>
+    <linearGradient id="hg" x1="0" x2="1">
+      <stop offset="0" stop-color="#2B2B2B"/>
+      <stop offset="1" stop-color="#111"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- left block: hazard triangle + gear frame -->
+  <g transform="translate(20,10)">
+    <g transform="translate(120,120)">
+      <circle r="86" fill="#111"/>
+      <circle r="72" fill="#2B2B2B"/>
+    </g>
+
+    <!-- inner hazard triangle -->
+    <g transform="translate(40,10)">
+      <polygon points="96,6 192,160 0,160" fill="#F6C54D" stroke="#242424" stroke-width="6"/>
+      <!-- brick pattern -->
+      <g fill="none" stroke="#D9B06A" stroke-width="2" opacity="0.85">
+        <path d="M24 110 H168"/>
+        <path d="M24 88 H168"/>
+        <path d="M24 66 H168"/>
+        <path d="M36 110 V66"/>
+        <path d="M84 110 V66"/>
+        <path d="M132 110 V66"/>
+      </g>
+
+      <!-- single vertical eye -->
+      <g transform="translate(96,72)">
+        <ellipse rx="24" ry="18" fill="#FFFFFF" stroke="#242424" stroke-width="3"/>
+        <ellipse rx="6" ry="14" fill="#242424"/>
+        <g stroke="#242424" stroke-linecap="round" stroke-width="2">
+          <line x1="-18" y1="-24" x2="-8" y2="-10"/>
+          <line x1="18" y1="-24" x2="8" y2="-10"/>
+          <line x1="0" y1="-24" x2="0" y2="-10"/>
+        </g>
+      </g>
+
+      <!-- top hat -->
+      <g transform="translate(96,-16)">
+        <rect x="-18" y="-36" width="36" height="12" rx="2" fill="#242424"/>
+        <rect x="-12" y="-72" width="24" height="48" rx="3" fill="#111"/>
+      </g>
+
+      <!-- rust / drip -->
+      <path d="M154 146 q10 18 -8 28 q-10 8 -12 -6" fill="#B31C1C" opacity="0.95"/>
+      <path d="M18 146 q-8 14 6 22 q10 8 -6 10" fill="#B31C1C" opacity="0.9"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <g transform="translate(320,96)">
+    <text x="0" y="0" font-family="Impact, 'Segoe UI', sans-serif" font-size="64" font-weight="700" fill="#2B2B2B">kernel</text>
+    <text x="0" y="70" font-family="Impact, 'Segoe UI', sans-serif" font-size="84" font-weight="900" fill="#F6C54D" stroke="#242424" stroke-width="2">mcp</text>
+    <text x="220" y="54" font-family="Consolas, 'Fira Code', monospace" font-size="14" fill="#D9B06A">— Scan, Corrupt, Pwn</text>
+  </g>
+</svg>
