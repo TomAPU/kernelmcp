@@ -222,6 +222,9 @@ class RemoteGdbMI:
                     with self._cv:
                         self._state = "exited"
                         self._cv.notify_all()
+                elif msg in {"thread-group-added", "cmd-param-changed"}:
+                    # Ignore for now
+                    pass
                 else:
                     self.logger.error(
                         "Unhandled notify message: %r", msg)
