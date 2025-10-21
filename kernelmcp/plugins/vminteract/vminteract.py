@@ -297,7 +297,7 @@ class VMInteractPlugin(McpPlugin):
     # ---------- GDB-related tools ----------
     @mcp_tool
     @ensure_gdb()
-    def gdb_get_vm_state(self) -> str:
+    def gdb_get_vm_state(self) -> Dict[str, Any]:
         """
         Leverage GDB to get the current state of the virtual machine.
         Returns: {"status": str, "note": Optional[Dict]} 
