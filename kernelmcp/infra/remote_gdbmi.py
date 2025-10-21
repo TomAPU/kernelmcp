@@ -57,6 +57,8 @@ class RemoteGdbMI:
         # GDB logging
         if gdboutput:
             self.send(f"set logging file {gdboutput}", timeout_sec=2.0)
+            self.send("set logging overwrite on", timeout_sec=2.0)
+            self.send("set trace-commands on", timeout_sec=2.0)
             self.send("set logging on", timeout_sec=2.0)
 
         # Start background poller to consume async MI notifications (e.g., *stopped)
