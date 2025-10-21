@@ -184,3 +184,30 @@ def test_function_range(make_cqdb):
     assert r["start"] == 1, f"Expected start=1, got {r['start']}"
     if r["end"] is not None:
         assert r["end"] == 8, f"Expected end=8, got {r['end']}"
+
+
+def test_functions_of_file_listing(make_cqdb):
+    """
+    Ensure get_function_macro_of_file lists function/macro definitions for a given file (p=13).
+    We verify at least the concrete functions defined in our test sources are present.
+    """
+    cqs = CodeQuerySearch(make_cqdb["db"])
+
+    # a.c defines: int add(int a, int b) { ... }
+    a_funcs = cqs.get_function_macro_of_file("a.c")
+    assert isinstance(a_funcs, list)
+    assert any(h["name"] == "add" and h["kind"] == "function_or_macro" and Path(h["path"]).name == "a.c"
+               for h in a_funcs), a_funcs
+    # source should be p=13 for this API
+    assert all(h["source"] == "p=13" for h in a_funcs), a_funcs
+
+    # b.c defines: int use(void) { ... }
+    b_funcs = cqs.get_function_macro_of_file("b.c")
+    assert any(h["name"] == "use" and Path(h["path"]).name ==
+               "b.c" for h in b_funcs), b_funcs
+
+    # Should return absolute paths and valid line numbers
+    for lst in (a_funcs, b_funcs):
+        for h in lst:
+            assert Path(h["path"]).is_absolute(), h
+            assert isinstance(h["line"], int) and h["line"] > 0, h

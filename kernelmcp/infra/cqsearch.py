@@ -140,6 +140,29 @@ class CodeQuerySearch:
             })
         return out
 
+    def get_function_macro_of_file(
+        self,
+        file_term: str,
+        *,
+        timeout: Optional[int] = None,
+    ) -> List[Dict]:
+        """
+        List all function/macro definitions belonging to a specific file using cqsearch p=13.
+
+        Parameters:
+          - file_term: The file name or relative path as known to the CodeQuery DB (e.g., "a.c" or "drivers/foo/bar.c").
+          - timeout: Optional timeout in seconds for the underlying command.
+
+        Returns a list of items: {"name","path","line","preview","kind","source"}
+        where kind is "function_or_macro" and source is "p=13".
+        """
+        # p=13: search by file to list function/macro defs within that file
+        hits = self._search(file_term, p=13, path_filter=None, timeout=timeout)
+        # Ensure kind is consistent regardless of internal mapping defaults
+        for h in hits:
+            h.kind = "function_or_macro"
+        return [self._hit_to_json(h) for h in self._dedup(hits)]
+
     # ---------------- Internals ----------------
 
     def _run(self, args: List[str], timeout: Optional[int] = None) -> str:
@@ -184,7 +207,7 @@ class CodeQuerySearch:
                 line=lno,
                 preview=preview,
                 kind="reference" if p == 1 else (
-                    "call" if p == 8 else "class_or_struct" if p == 3 else "function_or_macro" if p == 2 else "reference"),
+                    "call" if p == 8 else "class_or_struct" if p == 3 else "function_or_macro" if p in (2, 13) else "reference"),
                 source=f"p={p}"
             ))
         return hits
