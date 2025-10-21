@@ -62,3 +62,14 @@ class CodeLookup(McpPlugin):
         This can be used be comnbined with the get_source tool to retrieve the function's source code.
         """
         return self.db.get_function_range(symbol)
+
+    @mcp_tool
+    @ensure_db()
+    @limit_list(max_items=100)
+    def source_get_function_macro_of_file(self, file_term: str) -> List[Dict]:
+        """
+        List function/macro definitions of the given source file.
+        Example input:
+            - "a.c" or "drivers/tty/tty_jobctrl.c"
+        """
+        return self.db.get_function_macro_of_file(file_term)
