@@ -95,6 +95,7 @@ class VMManage:
             "ezqm",
             cwd=str(self.project_dir),
             encoding="utf-8",
+            codec_errors='ignore',
             echo=False,
         )
         if self.vmoutput:
