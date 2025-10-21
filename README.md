@@ -10,6 +10,6 @@ Kernel MCP is an MCP server that supports kernel security analysis.
 - [Plugin Development](./docs/plugindev.md)
 - [Details of the Dev Container Script](./docs/devcontainer.md)
 - [Work with Claude Desktop](./docs/claudedesktop.md)
-
+- [Work with Codex](./docs/codex.md)
 # NOTE For UCR Seclab guys:
 For QEMU reason, it's working on our KQ server. I've tested this on COLOSSUS.

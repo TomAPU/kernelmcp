@@ -3,10 +3,7 @@ Claude has a problem with connecting to local HTTP server, so we need [mcp-proxy
 This tool can convert streamable HTTP to a local stdio server, just to make Claude Desktop happy!
 
 ## Install mcp-proxy
-Follow their document, run:
-```bash
-pipx install mcp-proxy
-```
+Follow this [mcp-proxy installation](./mcpproxy.md)
 
 ## Configure in Claude Desktop
 
