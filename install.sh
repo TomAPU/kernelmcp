@@ -23,22 +23,32 @@ mkdir -p tools/diskimage
 
 if [[ ! -f tools/diskimage/IMAGE_CREATED ]]; then
   echo "[INFO] Creating syzkaller image..."
+(
+  destdir="$(pwd)/tools/diskimage"
+  mkdir -p "$destdir"
+
+  tmpdir="$(mktemp -d)"
+  trap 'sudo rm -rf "$tmpdir"' EXIT
+
   (
-    cd tools/diskimage
+    cd "$tmpdir"
     if [[ ! -f create-image.sh ]]; then
       wget https://raw.githubusercontent.com/google/syzkaller/master/tools/create-image.sh
     fi
     chmod +x create-image.sh
     ./create-image.sh -d bullseye
     touch IMAGE_CREATED
-    # cleanup
-    sudo rm -rf ./bullseye 
-    rm create-image.sh
-    # unify the image name and SSH key name 
+
+    # Unify the image name and SSH key name 
     mv bullseye.img diskimage.img
     mv bullseye.id_rsa sshkey.id_rsa
     mv bullseye.id_rsa.pub sshkey.id_rsa.pub
+
+    # Copy results back to tools/diskimage
+    cp diskimage.img sshkey.id_rsa sshkey.id_rsa.pub "$destdir/"
+    cp IMAGE_CREATED "$destdir/"
   )
+)
 else
   echo "[INFO] Syzkaller image already exists. Skipping creation."
 fi
