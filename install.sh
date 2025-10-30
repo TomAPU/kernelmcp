@@ -3,7 +3,7 @@ set -euo pipefail
 
 # --- Prerequisites ---
 command -v uv >/dev/null 2>&1 || { echo "[ERROR] 'uv' not found in PATH." >&2; exit 1; }
-command -v codeql >/dev/null 2>&1 || { echo "[ERROR] 'codeql' not found in PATH." >&2; exit 1; }
+# command -v codeql >/dev/null 2>&1 || { echo "[ERROR] 'codeql' not found in PATH." >&2; exit 1; }
 
 # --- Run uv sync ---
 if ! uv sync; then
@@ -12,10 +12,10 @@ if ! uv sync; then
 fi
 
 # --- Download CodeQL pack ---
-if ! codeql pack download codeql/cpp-all; then
-  echo "[ERROR] 'codeql pack download codeql/cpp-all' failed." >&2
-  exit 1
-fi
+# if ! codeql pack download codeql/cpp-all; then
+#   echo "[ERROR] 'codeql pack download codeql/cpp-all' failed." >&2
+#   exit 1
+# fi
 
 # --- Syzkaller image creation ---
 mkdir -p tools/

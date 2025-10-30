@@ -170,6 +170,10 @@ class VMManage:
             return True
 
         self._spawn_ezqm()
+        self.sendline("")
+        self.sendline("export PS1='root@syzkaller#'")
+        self.receive(timeout=2)  # allow time for prompt to update
+        self.sendline("")
 
         ok = self._wait_for_prompt(timeout_sec)
         if not ok:

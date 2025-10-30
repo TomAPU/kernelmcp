@@ -40,13 +40,21 @@ RUN apt-get update && \
     gdbserver \
     && rm -rf /var/lib/apt/lists/*
 
+# Link clang-15 as default clang
+RUN ln -s /usr/bin/clang-15 /usr/local/bin/clang && \
+    ln -s /usr/bin/clang++-15 /usr/local/bin/clang++ && \
+    ln -s /usr/bin/ld.lld-15 /usr/local/bin/ld.lld && \
+    ln -s /usr/bin/llvm-ar-15 /usr/local/bin/llvm-ar && \
+    ln -s /usr/bin/llvm-ranlib-15 /usr/local/bin/llvm-ranlib && \
+    ln -s /usr/bin/llvm-nm-15 /usr/local/bin/llvm-nm
+
 # Make sure the loader can find the fresh shared libraries
 RUN echo "/opt/llvm/lib" > /etc/ld.so.conf.d/llvm-15.conf && ldconfig
 
 # Fix for libmpfr version mismatch
-RUN if [ ! -f /usr/lib/x86_64-linux-gnu/libmpfr.so.4 ]; then \
-    ln -s /usr/lib/x86_64-linux-gnu/libmpfr.so /usr/lib/x86_64-linux-gnu/libmpfr.so.4; \
-    fi
+# RUN if [ ! -f /usr/lib/x86_64-linux-gnu/libmpfr.so.4 ]; then \
+#     ln -s /usr/lib/x86_64-linux-gnu/libmpfr.so /usr/lib/x86_64-linux-gnu/libmpfr.so.4; \
+#     fi
 
 # Generate locale
 RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen && \
@@ -59,14 +67,14 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && uv --version
 
 # ---------- Install CodeQL CLI ----------
 # Layout: /opt/codeql/codeql, /opt/codeql/**.qlpack, etc.
-RUN mkdir -p /opt && \
-    cd /opt && \
-    curl -fL --retry 5 --connect-timeout 20 \
-    https://github.com/github/codeql-cli-binaries/releases/download/v${CODEQL_VERSION}/codeql-linux64.zip \
-    -o codeql.zip && \
-    unzip codeql.zip && rm -f codeql.zip && \
-    /opt/codeql/codeql --version && \
-    ln -s /opt/codeql/codeql /usr/bin/codeql
+# RUN mkdir -p /opt && \
+#     cd /opt && \
+#     curl -fL --retry 5 --connect-timeout 20 \
+#     https://github.com/github/codeql-cli-binaries/releases/download/v${CODEQL_VERSION}/codeql-linux64.zip \
+#     -o codeql.zip && \
+#     unzip codeql.zip && rm -f codeql.zip && \
+#     /opt/codeql/codeql --version && \
+#     ln -s /opt/codeql/codeql /usr/bin/codeql
 
 # Create non-root user and grant privileges
 # Ensure kvm group exists with correct GID

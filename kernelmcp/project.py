@@ -34,9 +34,15 @@ def initialize_ezqm_project(project_path: str, linux_path: str, logger: logging.
     logger.info("Initializing EZQM local environment in %s", project_path)
 
     # Step 1: ezcf --init-local
-    init_cmd = ["ezcf", "--init-local", linux_path]
+    init_cmd = ["ezcf", "--arch", "arm64", "--init-local", linux_path]
     logger.info("Running ezcf initialization: %s", " ".join(init_cmd))
     run_cmd(init_cmd, logger=logger, cwd=project_path)
+
+    # Step 1.5: Modify ezqmlocal.json for Android
+    modify_cmd = ["ezcf", "-l", "-u", "qemucmd", '{qemu_binary} -m 2048 -gdb tcp::{gdbport} -monitor tcp::{qemuport},server,nowait -smp 4 -display none -machine virt -chardev stdio,id=char0,logfile={outputfile},signal=off -serial chardev:char0 -no-reboot -device virtio-rng-pci -cpu host -m 2G -kernel {bzImage} -device virtio-scsi-pci,id=scsi -device scsi-hd,bus=scsi.0,drive=d0 -drive file={diskimage},if=none,id=d0 -append "nokaslr earlyprintk=serial root=/dev/sda2 console=ttyAMA0 selinux=0 kasan_multi_shot=1" -net user,host=10.0.2.10,hostfwd=tcp:127.0.0.1:{sshport}-:22 -net nic,model=e1000 -enable-kvm -nographic -snapshot']
+    logger.info("Modifying ezqmlocal.json for Android: %s",
+                " ".join(modify_cmd))
+    run_cmd(modify_cmd, logger=logger, cwd=project_path)
 
     # Step 2: ezqm -b
     build_cmd = ["ezqm", "-b"]
