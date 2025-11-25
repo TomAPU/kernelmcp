@@ -36,7 +36,11 @@ if [[ ! -f tools/diskimage/IMAGE_CREATED ]]; then
       wget https://raw.githubusercontent.com/google/syzkaller/master/tools/create-image.sh
     fi
     chmod +x create-image.sh
-    ./create-image.sh -d bullseye
+    ADD_PACKAGE="btrfs-progs,btrfs-compsize,e2fsprogs,xfsprogs,f2fs-tools,dosfstools,exfatprogs,\
+udftools,bpfcc-tools,nfs-common,cifs-utils,samba,\
+iproute2,bridge-utils,net-tools,iptables,iptables-persistent,\
+arptables,ebtables,nftables,tcpdump,conntrack,conntrackd,ipset,\
+ecryptfs-utils,bcc" ./create-image.sh -d bullseye --feature full
     touch IMAGE_CREATED
 
     # Unify the image name and SSH key name 
