@@ -33,8 +33,13 @@ class RemoteGdbMI:
         self._state = "idle"
 
         # ---- internal async/event machinery (minimal, additive) ----
-        self._io_lock = threading.RLock()
-        self._cv = threading.Condition()
+        # Lock to protect GDB I/O and _ingest_state function
+        self._io_lock = threading.Lock()
+        # Condition for efficient wait_for_stop change
+        self.stop_condition = threading.Condition()
+        # Lock to protect internal _state, last_stop, connected
+        # Inside this lock, do NOT perform any complex tasks, just read/write state and unlock
+        self._state_lock = threading.Lock()
         self._bg_stop = threading.Event()
         self._event_callback: Optional[Callable[[Dict[str, Any]], None]] = None
         self._last_stop: Optional[Dict[str, Any]] = None
@@ -79,22 +84,29 @@ class RemoteGdbMI:
             raise RuntimeError("Already connected")
         res = self._mi(
             f"-target-select remote {self.hostport}", timeout_sec)
-        if res["ok"]:
-            self._connected, self._state = True, "stopped"
-        else:
-            self._connected = False
+        ok = res["ok"]
+        with self._state_lock:
+            if ok:
+                self._connected, self._state, self._last_stop = True, "stopped", None
+            else:
+                self._connected, self._state, self._last_stop = False, "idle", None
+        with self.stop_condition:
+            self.stop_condition.notify_all()
         return res
 
     def disconnect(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
         res = self._mi("-target-detach", timeout_sec)
-        self._connected, self._state = False, "idle"
+        with self._state_lock:
+            self._connected, self._state, self._last_stop = False, "idle", None
+        with self.stop_condition:
+            self.stop_condition.notify_all()
         return res
 
     def get_state(self) -> str:
         """
         Get current state: "idle", "running", "stopped", "exited"
         """
-        with self._io_lock:
+        with self._state_lock:
             state = self._state
             if state == "stopped":
                 return {"status": state, "note": copy.deepcopy(self._last_stop)}
@@ -160,23 +172,38 @@ class RemoteGdbMI:
         Block until a '*stopped' async notify is observed (e.g., breakpoint hit/step/signal).
         Returns {"ok": True, "stop": {...}} or {"ok": False, "error": "timeout"}.
         """
-        deadline = (time.monotonic() +
-                    timeout_sec) if timeout_sec is not None else None
-        with self._cv:
-            with self._io_lock:
-                if self._state == "stopped" and self._last_stop is not None:
-                    return {"ok": True, "stop": copy.deepcopy(self._last_stop)}
-            while True:
-                remaining = None if deadline is None else max(
-                    0.0, deadline - time.monotonic())
-                if remaining == 0.0:
-                    return {"ok": False, "error": "timeout"}
-                self._cv.wait(timeout=remaining)
-                with self._io_lock:
-                    if self._state == "stopped" and self._last_stop is not None:
-                        return {"ok": True, "stop": copy.deepcopy(self._last_stop)}
-                if deadline is not None and time.monotonic() >= deadline:
-                    return {"ok": False, "error": "timeout"}
+
+        def check_state():
+            """
+            Check if state is already stopped/exited.
+            If so, return True, {...} (which is the return message for wait_for_stop).
+            Otherwise return False, state_string.
+            """
+            with self._state_lock:
+                if self._state == "stopped":
+                    return True, {"ok": True, "stop": copy.deepcopy(self._last_stop)}
+                if self._state == "exited":
+                    return True, {"ok": False, "error": "target exited"}
+                if self._state == "idle":
+                    return True, {"ok": False, "error": "target idle, we may be disconnected from the target"}
+                return False, self._state
+
+        with self.stop_condition:
+            # Check if already stopped, if so return immediately
+            ok_to_return, state_or_msg = check_state()
+            if ok_to_return:
+                return state_or_msg
+            # Ok we have to wait for a stop condition
+            ret = self.stop_condition.wait(timeout=timeout_sec)
+            if ret:
+                ok_to_return, state_or_msg = check_state()
+                if ok_to_return:
+                    return state_or_msg
+                self.logger.error(
+                    "wait_for_stop: state should be stopped but end up being state=%r", self._state)
+                return {"ok": False, "error": "state should be stopped/exited but reported as %r" % self._state}
+            else:
+                return {"ok": False, "error": "timeout"}
 
     # ---------- Internals ----------
 
@@ -211,19 +238,21 @@ class RemoteGdbMI:
             if r.get("type") == "notify":
                 msg = r.get("message")
                 if msg == "running":
-                    with self._cv:
+                    with self._state_lock:
                         self._state = "running"
-                        self._cv.notify_all()
                 elif msg == "stopped":
                     stop = _parse_stopped_record(r)
-                    with self._cv:
-                        self._state = "stopped"
-                        self._last_stop = stop
-                        self._cv.notify_all()
+                    with self.stop_condition:
+                        with self._state_lock:
+                            self._state = "stopped"
+                            self._last_stop = stop
+                        self.stop_condition.notify_all()
                 elif msg == "thread-group-exited":
-                    with self._cv:
-                        self._state = "exited"
-                        self._cv.notify_all()
+                    with self.stop_condition:
+                        with self._state_lock:
+                            self._state = "exited"
+                            self._last_stop = None
+                        self.stop_condition.notify_all()
                 elif msg in {"thread-group-added", "cmd-param-changed"}:
                     # Ignore for now
                     pass
