@@ -12,27 +12,6 @@ import pexpect
 from .utils import run_cmd
 
 
-class _LoggerWriter:
-    """File-like object that forwards writes to logger.info(line)."""
-
-    def __init__(self, logger: logging.Logger):
-        self.logger = logger
-        self._buf = ""
-
-    def write(self, s: str) -> None:
-        # Buffer by lines to avoid spamming partial fragments
-        self._buf += s
-        while "\n" in self._buf:
-            line, self._buf = self._buf.split("\n", 1)
-            # Preserve raw VM output lines at info level for later inspection
-            self.logger.info(line)
-
-    def flush(self) -> None:
-        if self._buf:
-            self.logger.info(self._buf)
-            self._buf = ""
-
-
 class VMManage:
     """Lightweight wrapper for running/controlling ezqm-based VMs.
 

@@ -95,8 +95,6 @@ class VMInteractPlugin(McpPlugin):
               }
 
     Notes:
-        * All console output from the underlying VM is logged at info level through the
-          main plugin logger (via VMManage's _LoggerWriter).
         * Errors are captured and surfaced in the returned message field while keeping
           the structure predictable for the MCP caller.
     """
