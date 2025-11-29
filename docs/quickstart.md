@@ -38,10 +38,16 @@ and generates a `config.json` file inside it.
 ## Run
 
 ```bash
-python -m kernelmcp.main -c <path to config.json>
+python -m kernelmcp.main -c <path to config.json> -t http
 ```
 
 > **Note:** The container’s port `3125` is mapped to the host port specified with the `-p` option in `rundevcontainer.sh`, so you don’t need to change the port option in `kernelmcp.main`.
 
 The MCP server will then be available at:
 `http://127.0.0.1:<port>/mcp`
+
+You can also run it with stdio
+
+```bash
+python -m kernelmcp.main -c <path to config.json> -t stdio
+```
