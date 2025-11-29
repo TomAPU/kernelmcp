@@ -58,6 +58,13 @@ def main():
         help="HTTP port to bind (default: 3125)",
     )
     parser.add_argument(
+        "-t",
+        "--transport",
+        choices=["http", "stdio"],
+        default="http",
+        help="Transport to use for MCP server (default: http)",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -97,7 +104,13 @@ def main():
             logger.error(
                 f"Failed to initialize plugin {plugin_cls.__name__}: {e}")
 
-    mcp.run(transport="http", host="0.0.0.0", port=args.port)
+    if args.transport == "stdio":
+        logger.info("Starting MCP server over stdio transport")
+        mcp.run(transport="stdio")
+    else:
+        logger.info(
+            f"Starting MCP server over HTTP on 0.0.0.0:{args.port}")
+        mcp.run(transport="http", host="0.0.0.0", port=args.port)
 
 
 if __name__ == "__main__":
