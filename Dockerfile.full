@@ -8,19 +8,15 @@ ARG REPO_REF=HEAD
 ENV KERNELMCP_DIR=/kernelmcp
 
 USER root
-RUN rm -rf "${KERNELMCP_DIR}" && \
-    mkdir -p "${KERNELMCP_DIR}" && \
-    chown "${USERNAME}:${USERNAME}" "${KERNELMCP_DIR}"
-
-USER ${USERNAME}
-WORKDIR /home/${USERNAME}
+RUN rm -rf "${KERNELMCP_DIR}"
 
 RUN --mount=type=bind,source=.git,target=/tmp/kernelmcp.git,readonly \
-    rm -rf "${KERNELMCP_DIR}" && \
     git clone /tmp/kernelmcp.git "${KERNELMCP_DIR}" && \
     cd "${KERNELMCP_DIR}" && \
     git checkout "${REPO_REF}" && \
-    git submodule update --init --recursive
+    git submodule update --init --recursive && \
+    chown -R "${USERNAME}:${USERNAME}" "${KERNELMCP_DIR}"
 
+USER ${USERNAME}
 WORKDIR ${KERNELMCP_DIR}
 RUN ./install.sh
