@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1.4
+ARG BASE_IMAGE=kernelmcp-devuser
+FROM ${BASE_IMAGE}
+
+ARG USERNAME=devuser
+ARG REPO_REF=HEAD
+
+ENV KERNELMCP_DIR=/kernelmcp
+
+USER root
+RUN rm -rf "${KERNELMCP_DIR}" && \
+    mkdir -p "${KERNELMCP_DIR}" && \
+    chown "${USERNAME}:${USERNAME}" "${KERNELMCP_DIR}"
+
+USER ${USERNAME}
+WORKDIR /home/${USERNAME}
+
+RUN --mount=type=bind,source=.git,target=/tmp/kernelmcp.git,readonly \
+    rm -rf "${KERNELMCP_DIR}" && \
+    git clone /tmp/kernelmcp.git "${KERNELMCP_DIR}" && \
+    cd "${KERNELMCP_DIR}" && \
+    git checkout "${REPO_REF}" && \
+    git submodule update --init --recursive
+
+WORKDIR ${KERNELMCP_DIR}
+RUN ./install.sh
