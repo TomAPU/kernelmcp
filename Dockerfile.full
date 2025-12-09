@@ -8,6 +8,7 @@ ARG UID=1000
 ARG GID=1000
 ARG KVM_GID=108
 ARG CODEQL_VERSION=2.23.0
+ARG CODEX_VERSION=0.63.0
 ARG REPO_REF=HEAD
 
 # Common environment settings
@@ -112,6 +113,15 @@ RUN --mount=type=bind,source=.git,target=/tmp/kernelmcp.git,readonly \
     git checkout "${REPO_REF}" && \
     git submodule update --init --recursive && \
     chown -R "${USERNAME}:${USERNAME}" "${KERNELMCP_DIR}"
+
+# Install codex
+RUN wget https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-x86_64-unknown-linux-gnu.tar.gz -O /tmp/codex.tar.gz && \
+    tar -xzf /tmp/codex.tar.gz -C /usr/local/bin codex-x86_64-unknown-linux-gnu && \
+    mv /usr/local/bin/codex-x86_64-unknown-linux-gnu /usr/local/bin/codex && \
+    rm /tmp/codex.tar.gz && \
+    chmod +x /usr/local/bin/codex
+
+# Install KernelMCP
 
 USER ${USERNAME}
 WORKDIR ${KERNELMCP_DIR}
