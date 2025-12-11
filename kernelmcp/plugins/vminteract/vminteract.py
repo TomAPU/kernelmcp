@@ -227,14 +227,17 @@ class VMInteractPlugin(McpPlugin):
     @ensure_vm_not_halted()
     def vm_receive(self, timeout: int = 1) -> Dict[str, Any]:
         """
-        Read from the VM console until timeout or until the prompt is seen.
+        Takes only a timeout as the parameter (in seconds).
+        Read text from the VM console until one of these happens:
+        1. The prompt "root@syzkaller" appears.
+        2. The total wait time reaches `timeout` seconds (prompt not seen).
 
-        Returns a dict:
-        {"success": bool, "content": str, "reason": "Timeout" | "Meets prompt" | "<error msg>"}
-
-        The underlying implementation is expected to perform reading until
-        1) timeout occurs, or
-        2) the prompt (root@syzkaller, indicating the VM is ready for input) is observed.
+        Returns:
+            {
+                "success": bool,      # True if reading succeeded (both "root@syzkaller" appears and timeout are regarded as success).
+                "content": str,       # All text read from the console.
+                "reason": str         # "Meets prompt", "Timeout", or an error message.
+            }
         """
         try:
             # Your existing method returns {"content": str, "reason": "..."}.
