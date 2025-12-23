@@ -102,7 +102,7 @@ class RemoteGdbMI:
             self.stop_condition.notify_all()
         return res
 
-    def get_state(self) -> str:
+    def get_state(self) -> Dict[str, Any]:
         """
         Get current state: "idle", "running", "stopped", "exited"
         """
