@@ -242,10 +242,14 @@ class RemoteGdbMI:
                         self._state = "running"
                 elif msg == "stopped":
                     stop = _parse_stopped_record(r)
+                    _connected = True
+                    if "reason" in stop and stop["reason"] == "exited-normally":
+                        _connected = False
                     with self.stop_condition:
                         with self._state_lock:
                             self._state = "stopped"
                             self._last_stop = stop
+                            self._connected = _connected
                         self.stop_condition.notify_all()
                 elif msg == "thread-group-exited":
                     with self.stop_condition:

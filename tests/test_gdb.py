@@ -7,6 +7,7 @@ from pathlib import Path
 import signal
 import pytest
 import os
+import logging
 from kernelmcp.infra import RemoteGdbMI
 from kernelmcp.infra.utils import get_unused_port
 
@@ -423,3 +424,25 @@ def test_wait_for_stop_timeout_running_inferior(persistent_gdbserver):
     finally:
         gdb.close()
         proc.terminate()
+
+
+def test_is_disconnected_after_program_exit(gdbserver):
+    """After the inferior exits, GDB should no longer be marked as connected."""
+    logger = logging.getLogger("TEST.GDB")
+    logger.setLevel(logging.DEBUG)
+    exe, port = gdbserver
+    gdb = RemoteGdbMI(exe, port, logger=logger)
+    try:
+        assert gdb.connect(timeout_sec=5.0)["ok"]
+
+        # Run to program end and wait for exit notification
+        assert gdb.continue_execution(timeout_sec=5.0)["ok"]
+        final = gdb.wait_for_stop(timeout_sec=5.0)
+        assert final.get("ok"), f"final wait_for_stop failed: {final}"
+        assert (final.get("stop") or {}).get("reason") in {
+            "exited", "exited-normally", "exited-signalled"}
+
+        # After program exit, gdb.is_connected should be False
+        assert not gdb.is_connected
+    finally:
+        gdb.close()
