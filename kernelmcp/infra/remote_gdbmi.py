@@ -243,11 +243,14 @@ class RemoteGdbMI:
                 elif msg == "stopped":
                     stop = _parse_stopped_record(r)
                     _connected = True
-                    if "reason" in stop and stop["reason"] == "exited-normally":
+                    state = "stopped"
+                    # List from https://sourceware.org/gdb/current/onlinedocs/gdb.html/GDB_002fMI-Async-Records.html
+                    if "reason" in stop and stop["reason"] in ("exited-normally", "exited", "exited-signalled"):
                         _connected = False
+                        state = "exited"
                     with self.stop_condition:
                         with self._state_lock:
-                            self._state = "stopped"
+                            self._state = state
                             self._last_stop = stop
                             self._connected = _connected
                         self.stop_condition.notify_all()
@@ -256,6 +259,7 @@ class RemoteGdbMI:
                         with self._state_lock:
                             self._state = "exited"
                             self._last_stop = None
+                            self._connected = False
                         self.stop_condition.notify_all()
                 elif msg in {"thread-group-added", "cmd-param-changed"}:
                     # Ignore for now

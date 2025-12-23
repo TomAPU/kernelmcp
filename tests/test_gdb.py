@@ -205,10 +205,11 @@ def test_gdb_break_and_eval_then_exit(gdbserver):
         # Continue to program end; expect an exit stop
         cont2 = gdb.continue_execution(timeout_sec=5.0)
         assert cont2["ok"], f"final continue failed: {cont2.get('error')}"
-        rstop2 = gdb.wait_for_stop(timeout_sec=5.0)
-        assert rstop2.get("ok"), f"final wait_for_stop failed: {rstop2}"
-        assert (rstop2.get("stop") or {}).get("reason") in {
-            "exited", "exited-normally", "exited-signalled"}
+        final_stop = gdb.wait_for_stop(timeout_sec=5.0)
+        assert final_stop.get(
+            "ok") == False, f"final wait_for_stop failed: {final_stop}"
+        assert final_stop.get(
+            "error") == "target exited", f"unexpected final stop: {final_stop}"
     finally:
         gdb.close()
 
@@ -325,9 +326,9 @@ def test_step_disassemble_registers_memory_flow(gdbserver):
         assert cont["ok"], f"final continue failed: {cont.get('error')}"
         final_stop = gdb.wait_for_stop(timeout_sec=5.0)
         assert final_stop.get(
-            "ok"), f"final wait_for_stop failed: {final_stop}"
-        assert (final_stop.get("stop") or {}).get("reason") in {
-            "exited", "exited-normally", "exited-signalled"}
+            "ok") == False, f"final wait_for_stop failed: {final_stop}"
+        assert final_stop.get(
+            "error") == "target exited", f"unexpected final stop: {final_stop}"
     finally:
         gdb.close()
 
@@ -399,10 +400,11 @@ def test_wait_for_stop_breakpoint_hit(gdbserver):
         # Cleanly continue to program exit for teardown hygiene
         cont2 = gdb.continue_execution(timeout_sec=5.0)
         assert cont2["ok"], f"final continue failed: {cont2.get('error')}"
-        res2 = gdb.wait_for_stop(timeout_sec=5.0)
-        assert res2.get("ok"), f"final wait_for_stop failed: {res2}"
-        assert (res2.get("stop") or {}).get("reason") in {
-            "exited", "exited-normally", "exited-signalled"}
+        final_stop = gdb.wait_for_stop(timeout_sec=5.0)
+        assert final_stop.get(
+            "ok") == False, f"final wait_for_stop failed: {final_stop}"
+        assert final_stop.get(
+            "error") == "target exited", f"unexpected final stop: {final_stop}"
     finally:
         gdb.close()
 
@@ -437,10 +439,11 @@ def test_is_disconnected_after_program_exit(gdbserver):
 
         # Run to program end and wait for exit notification
         assert gdb.continue_execution(timeout_sec=5.0)["ok"]
-        final = gdb.wait_for_stop(timeout_sec=5.0)
-        assert final.get("ok"), f"final wait_for_stop failed: {final}"
-        assert (final.get("stop") or {}).get("reason") in {
-            "exited", "exited-normally", "exited-signalled"}
+        final_stop = gdb.wait_for_stop(timeout_sec=5.0)
+        assert final_stop.get(
+            "ok") == False, f"final wait_for_stop failed: {final_stop}"
+        assert final_stop.get(
+            "error") == "target exited", f"unexpected final stop: {final_stop}"
 
         # After program exit, gdb.is_connected should be False
         assert not gdb.is_connected
