@@ -2,8 +2,8 @@
 set -euo pipefail
 # Make sure that everyone 
 USERNAME="$(id -un)"
-IMAGE_NAME="kernelmcp-${USERNAME}"
-CONTAINER_NAME="kernelmcp-devcontainer-${USERNAME}"
+IMAGE_NAME="kernelmcp-nogdb-${USERNAME}"
+CONTAINER_NAME="kernelmcp-nogdb-devcontainer-${USERNAME}"
 HOST_PORT=3125
 ADDITIONAL_FOLDER=""
 PERMANENT=false
