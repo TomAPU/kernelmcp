@@ -1,0 +1,46 @@
+import json
+
+import pytest
+
+import kernelmcp.infra.syzlogparser as syzmod
+
+
+def _require_syzlogparser_binary() -> None:
+	"""Skip the test if the real syz-logparser binary is not available."""
+	try:
+		parser = syzmod.SyzLogparser(content="")
+	except FileNotFoundError:
+		pytest.skip("syz-logparser binary not found; skipping syzlogparser tests")
+	else:
+		# Avoid actually running anything in this helper; just ensure init worked.
+		assert parser.syzloggerpath.is_file()
+
+
+def test_parse_garbage_returns_empty() -> None:
+	"""Garbage log content should yield an empty list from parse()."""
+	_require_syzlogparser_binary()
+	parser = syzmod.SyzLogparser(content="some completely unrelated noise")
+	out = parser.parse()
+	assert isinstance(out, list)
+	# For completely unrelated garbage, syz-logparser is expected to output
+	# either an empty list or something that our wrapper maps to [].
+	assert out == []
+
+
+def test_parse_kasan_returns_non_empty() -> None:
+	"""KASAN-like content should yield a non-empty list from parse()."""
+	_require_syzlogparser_binary()
+	kasan_log = """[  123.456789] BUG: KASAN: use-after-free in foo+0x1/0x2"""
+	parser = syzmod.SyzLogparser(content=kasan_log)
+	out = parser.parse()
+	assert isinstance(out, list)
+	assert len(out) == 1
+
+def test_parse_kasan_with_bad_characters() -> None:
+	"""KASAN-like content should yield a non-empty list from parse()."""
+	_require_syzlogparser_binary()
+	kasan_log = """[  123.456789] BUG: KASAN: use-after-free in foo+0x1/0x2\nSome bad char: \ud800"""
+	parser = syzmod.SyzLogparser(content=kasan_log)
+	out = parser.parse()
+	assert isinstance(out, list)
+	assert len(out) == 1
