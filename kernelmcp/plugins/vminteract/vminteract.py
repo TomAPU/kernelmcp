@@ -26,23 +26,6 @@ def ensure_vm():
     return decorator
 
 
-def ensure_gdb():
-    """Decorator to ensure the RemoteGdbMI instance is initialized before using a tool.
-
-    Raises:
-        RuntimeError: if the plugin was not properly initialized (e.g. missing config).
-    """
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            self = args[0]
-            if not getattr(self, 'gdb', None):
-                raise RuntimeError(
-                    f"{self.NAME} plugin not properly initialized with gdb parameters. Check 'gdbport' and 'vmlinux' in ezqmlocal.json.")
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
 
 def ensure_vm_not_halted():
     """
@@ -173,7 +156,6 @@ class VMInteractPlugin(McpPlugin):
     # So I am deprecating it in favor of vm_sendline + vm_receive, which is lower-level and more flexible.
     # @mcp_tool
     @ensure_vm()
-    @ensure_vm_not_halted()
     def vm_exec_cmd(self, cmd: str, timeout_sec: int = 20) -> Dict[str, Any]:
         """
         Execute a command in the virtual machine and return its output.
@@ -191,7 +173,6 @@ class VMInteractPlugin(McpPlugin):
 
     @mcp_tool
     @ensure_vm()
-    @ensure_vm_not_halted()
     def vm_sendline(self, line: str) -> Dict[str, Any]:
         """
         Send a line to the VM console without waiting for a prompt.
@@ -207,7 +188,6 @@ class VMInteractPlugin(McpPlugin):
 
     @mcp_tool
     @ensure_vm()
-    @ensure_vm_not_halted()
     def vm_sendcontrol(self, char: str) -> Dict[str, Any]:
         """
         Send a control character (such as 'c' as Ctrl-C) to the VM console without waiting for a prompt.
@@ -224,7 +204,6 @@ class VMInteractPlugin(McpPlugin):
 
     @mcp_tool
     @ensure_vm()
-    @ensure_vm_not_halted()
     def vm_receive(self, timeout: int = 1) -> Dict[str, Any]:
         """
         Takes only a timeout as the parameter (in seconds).
@@ -257,7 +236,6 @@ class VMInteractPlugin(McpPlugin):
 
     @mcp_tool
     @ensure_vm()
-    @ensure_vm_not_halted()
     def vm_compile_c_and_upload(self, code: str, dest_path: str, flags: Optional[list[str]] = None) -> Dict[str, Any]:
         """
         Compile given C code into a binary using gcc, then upload it to the virtual machine.
@@ -295,157 +273,4 @@ class VMInteractPlugin(McpPlugin):
             return {"success": False, "reason": f"Upload failed: {up['reason']}"}
         return {"success": True, "reason": ""}
 
-    # ---------- GDB-related tools ----------
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_get_vm_state(self) -> Dict[str, Any]:
-        """
-        Leverage GDB to get the current state of the virtual machine.
-        Returns: {"status": str, "note": Optional[Dict]} 
-        where status is one of "idle", "running", "stopped", "exited". (If "stopped", note contains details about the stop. Likely a breakpoint hit.)
-        """
-        return self.gdb.get_state()
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_connect(self, timeout_sec: float = 3.0) -> Dict[str, Any]:
-        """
-        Make the GDB connected to the virtual machine.
-        Once connected, the virtual machine is halted.
-        """
-        return self.gdb.connect(timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_execute(self, cmd: str, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """
-        Execute a GDB command and return the result.
-        """
-        return self.gdb.send(cmd, timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_wait_for_stop(self, timeout_sec: float = 5.0) -> Dict[str, Any]:
-        """
-        Block until a '*stopped' async notify is observed (e.g., breakpoint hit/step/signal).
-        Returns {"ok": True, "stop": {...}} or {"ok": False, "error": "timeout"}.
-        This is super useful after sendline() or continue_execution() to wait until the VM halts.
-        """
-        return self.gdb.wait_for_stop(timeout_sec=timeout_sec)
-    # ---------- GDB MI execution control ----------
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_continue(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Continue program execution until a breakpoint or program exit."""
-        return self.gdb.continue_execution(timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_finish(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Run until the current function returns."""
-        return self.gdb.finish(timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_next(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Step over the next source line."""
-        return self.gdb.next(timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_step(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Step into the next source line."""
-        return self.gdb.step(timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_nexti(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Step over the next instruction."""
-        return self.gdb.nexti(timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_stepi(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Step into the next instruction."""
-        return self.gdb.stepi(timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_return(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Return from the current function."""
-        return self.gdb.return_from_function(timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_until(self, locspec: Optional[str] = None, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Continue execution until the specified location (or next line if not provided)."""
-        return self.gdb.until(locspec, timeout_sec=timeout_sec)
-
-    # ---------- GDB MI breakpoints ----------
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_break_insert(self, location: str, condition: Optional[str] = None, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Insert a new breakpoint at the given location, optionally with a condition."""
-        return self.gdb.set_breakpoint(location, condition, timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_break_list(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """List all breakpoints."""
-        return self.gdb.list_breakpoints(timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_break_delete(self, number: int, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Delete a specific breakpoint by number."""
-        return self.gdb.delete_breakpoint(number, timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_break_enable(self, number: int, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Enable a specific breakpoint."""
-        return self.gdb.enable_breakpoint(number, timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_break_disable(self, number: int, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Disable a specific breakpoint."""
-        return self.gdb.disable_breakpoint(number, timeout_sec=timeout_sec)
-
-    # ---------- GDB MI data inspection ----------
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_eval(self, expr: str, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Evaluate an expression in the current context."""
-        return self.gdb.evaluate_expression(expr, timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_registers(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """List all registers and their values."""
-        return self.gdb.get_registers_mi(timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_backtrace(self, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Get the current backtrace (stack frames)."""
-        return self.gdb.get_backtrace_mi(timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_disasm(self, length: int = 64, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Disassemble instructions around the current PC."""
-        return self.gdb.get_disassembly_mi(length=length, timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_read_mem(self, addr: str, fmt: str, size: int, rows: int, cols: int, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Read memory in the given format."""
-        return self.gdb.read_memory_mi(addr, fmt, size, rows, cols, timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_gdb()
-    def gdb_read_mem_bytes(self, addr: str, n: int, timeout_sec: float = 2.0) -> Dict[str, Any]:
-        """Read raw memory bytes."""
-        return self.gdb.read_memory_bytes(addr, n, timeout_sec=timeout_sec)
+    # No GDB
