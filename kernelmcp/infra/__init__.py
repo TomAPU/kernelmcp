@@ -3,6 +3,7 @@ from .cqsearch import CodeQuerySearch
 from .source_view import SourceView
 from .remote_gdbmi import RemoteGdbMI
 from .vm_manage import VMManage
+from .syzlogparser import SyzLogparser
 
 __all__ = ["CodeQLCpp", "CodeQuerySearch",
-           "SourceView", "RemoteGdbMI", "VMManage"]
+           "SourceView", "RemoteGdbMI", "VMManage", "SyzLogparser"]
