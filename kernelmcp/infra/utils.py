@@ -109,3 +109,23 @@ def compile_c_code(
         return {"success": True, "binary_path": str(out), "reason": ""}
     except Exception as e:
         return {"success": False, "binary_path": None, "reason": str(e)}
+
+
+def find_project_root(marker_dir: str = "tools") -> Path:
+    """Locate the project root directory based on this infra package location.
+
+    The project root is defined as the first ancestor directory of this file
+    that contains a subdirectory named ``marker_dir`` (defaults to ``"tools"``).
+
+    This is intentionally independent of the current working directory and
+    works reliably regardless of where callers import from.
+    """
+    here = Path(__file__).resolve()
+    start_dir = here.parent
+    for parent in (start_dir, *start_dir.parents):
+        if (parent / marker_dir).is_dir():
+            return parent
+    raise RuntimeError(
+        f"Could not locate project root (no '{marker_dir}' directory found above {here})"
+    )
+
