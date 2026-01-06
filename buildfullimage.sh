@@ -2,11 +2,11 @@
 set -euo pipefail
 
 USERNAME="$(id -un)"
-FULL_IMAGE_NAME="kernelmcp-full-${USERNAME}"
+FULL_IMAGE_NAME="kernelmcp-superweaken-full-${USERNAME}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FULL_DOCKERFILE="${SCRIPT_DIR}/Dockerfile.full"
 REPO_REF="$(git -C "${SCRIPT_DIR}" rev-parse HEAD 2>/dev/null || true)"
-BUILDX_BUILDER="kernelmcp-builder-${USERNAME}"
+BUILDX_BUILDER="kernelmcp-superweaken-builder-${USERNAME}"
 
 usage() {
   cat <<EOF
