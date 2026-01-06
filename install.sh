@@ -53,6 +53,23 @@ else
   echo "[INFO] Syzkaller image already exists. Skipping creation."
 fi
 
+# --- syz-logparser download ---
+# From https://github.com/TomAPU/syz-logparser/releases/download/v0.2/syz-logparser-x86_64-linux
+# tools/syz-logparser/syz-logparser
+if [[ ! -f tools/syz-logparser/syz-logparser ]]; then
+  echo "[INFO] Downloading syz-logparser..."
+  mkdir -p tools/syz-logparser
+  (
+    cd tools/syz-logparser
+    wget https://github.com/TomAPU/syz-logparser/releases/download/v0.2/syz-logparser-x86_64-linux
+    mv syz-logparser-x86_64-linux syz-logparser
+    chmod +x syz-logparser
+  )
+else
+  echo "[INFO] syz-logparser already exists. Skipping download."
+fi
+
+
 # --- Setup ezqm ---
 echo "[INFO] Setting up ezqm..."
 mkdir -p tools/memsnapshots
