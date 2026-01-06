@@ -4,50 +4,8 @@ from typing import Optional, Dict, Any
 from functools import wraps
 
 from kernelmcp.plugins import McpPlugin, mcp_tool
-from kernelmcp.infra import VMManage, RemoteGdbMI
+from kernelmcp.infra import VMManage, RemoteGdbMI, SyzLogparser
 from kernelmcp.infra.utils import compile_c_code
-
-
-def ensure_vm():
-    """Decorator to ensure the VMManage instance is initialized before using a tool.
-
-    Raises:
-        RuntimeError: if the plugin was not properly initialized (e.g. missing config).
-    """
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            self = args[0]
-            if not getattr(self, 'vm', None):
-                raise RuntimeError(
-                    f"{self.NAME} plugin not properly initialized with ezqm project dir. Check 'ezqmlocalfolder' in config.")
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
-
-def ensure_vm_not_halted():
-    """
-    Decorator to ensure the VM is running before using a tool.
-    This is done by checking if self.gdb is not in a halted state such as 'stopped'.
-    If GDB is not connected, we assume the VM is running.
-    This time, we don't do a raise but return a dict with success=False and a reason.
-    """
-    halted_states = {'stopped'}
-
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            self: VMInteractPlugin = args[0]
-            if getattr(self, 'gdb', None) and self.gdb.get_state()["status"] in halted_states:
-                return {
-                    "success": False,
-                    "reason": "The virtual machine is halted. You may want to resume it in GDB before using this tool.",
-                }
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
 
 
 class VMInteractPlugin(McpPlugin):
@@ -119,142 +77,30 @@ class VMInteractPlugin(McpPlugin):
         else:
             self.logger.info(
                 f"{self.NAME} plugin initialized with GDB port: {gdbport} and vmlinux: {vmlinux}")
-            self.gdb = RemoteGdbMI(binary_path=vmlinux,
-                                   port=gdbport, gdboutput=self.gdboutput, logger=self.logger)
+
+
 
     @mcp_tool
-    @ensure_vm()
-    def vm_start(self, timeout_sec: int = 20) -> Dict[str, Any]:
+    def try_crash_kernel(self, code: str, flags: Optional[list[str]] = None, timeout_sec: int = 20) -> Dict[str, Any]:
         """
-        Start the virtual machine
-        """
-        return {"success": self.vm.start_vm(timeout_sec=timeout_sec)}
-
-    @mcp_tool
-    @ensure_vm()
-    def vm_restart(self, timeout_sec: int = 20) -> Dict[str, Any]:
-        """
-        Restart the virtual machine. Use when the virtual machine is halted or unresponsive.
-        """
-        if not self.vm.restart_vm(timeout_sec=timeout_sec):
-            return {
-                "success": False,
-                "reason": "Failed to restart the virtual machine",
-            }
-        # Delete and recreate GDB instance to reset connection state
-        if getattr(self, 'gdb', None):
-            del self.gdb
-            gdbport = self.vm.localconf.get("gdbport", 0)
-            vmlinux = self.vm.localconf.get("vmlinux", "")
-            self.gdb = RemoteGdbMI(binary_path=vmlinux,
-                                   port=gdbport, gdboutput=self.gdboutput, logger=self.logger)
-        return {"success": True, "reason": ""}
-
-    # It turns out that vm_exec_cmd is too high-level for many scenarios,
-    # especially when debugging kernels with breakpoints. And despite I asked LLM to use it only
-    # for simple commands, it always tried to use it for everything.
-    # So I am deprecating it in favor of vm_sendline + vm_receive, which is lower-level and more flexible.
-    # @mcp_tool
-    @ensure_vm()
-    def vm_exec_cmd(self, cmd: str, timeout_sec: int = 20) -> Dict[str, Any]:
-        """
-        Execute a command in the virtual machine and return its output.
-        This is a high-level primitive, more suitable for simple commands (such as viewing configurations in the virtual machine via cat).
-        DO NOT use this tool for interactive commands (such as vim, top, etc) or commands that may hit breakpoints.
-        Use this tool only when the virtual machine is running.
-        """
-        # Blacklist commands that contains "\n"
-        if "\n" in cmd:
-            return {
-                "success": False,
-                "reason": "Multi-line commands are not supported. Please use vm_sendline and vm_receive for interactive commands.",
-            }
-        return self.vm.exec_cmd(cmd, timeout_sec=timeout_sec)
-
-    @mcp_tool
-    @ensure_vm()
-    def vm_sendline(self, line: str) -> Dict[str, Any]:
-        """
-        Send a line to the VM console without waiting for a prompt.
-        This is a low-level primitive, and more suitable to be used in kernel debugging scenarios 
-        (where breakpoints might hit, so you need to send without receiving and then play with GDB).
-        Use this tool only when the virtual machine is running.
-        """
-        try:
-            self.vm.sendline(line)
-            return {"success": True, "reason": ""}
-        except Exception as e:
-            return {"success": False, "reason": str(e)}
-
-    @mcp_tool
-    @ensure_vm()
-    def vm_sendcontrol(self, char: str) -> Dict[str, Any]:
-        """
-        Send a control character (such as 'c' as Ctrl-C) to the VM console without waiting for a prompt.
-        This is a low-level primitive; prefer this for kernel/debug scenarios where
-        you need to poke the console regardless of prompt state.
-        Use this tool only when the virtual machine is running.
-        """
-        try:
-            # Delegate to the underlying method you already have.
-            self.vm.sendcontrol(char)
-            return {"success": True, "reason": ""}
-        except Exception as e:
-            return {"success": False, "reason": str(e)}
-
-    @mcp_tool
-    @ensure_vm()
-    def vm_receive(self, timeout: int = 1) -> Dict[str, Any]:
-        """
-        Takes only a timeout as the parameter (in seconds).
-        Read text from the VM console until one of these happens:
-        1. The prompt "root@syzkaller" appears.
-        2. The total wait time reaches `timeout` seconds (prompt not seen).
-
-        Returns:
-            {
-                "success": bool,      # True if reading succeeded (both "root@syzkaller" appears and timeout are regarded as success).
-                "content": str,       # All text read from the console.
-                "reason": str         # "Meets prompt", "Timeout", or an error message.
-            }
-        """
-        try:
-            # Your existing method returns {"content": str, "reason": "..."}.
-            res = self.vm.receive(timeout=timeout)
-            # Normalize to include a success flag.
-            return {
-                "success": True,
-                "content": res.get("content", ""),
-                "reason": res.get("reason", ""),
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "content": "",
-                "reason": str(e),
-            }
-
-    @mcp_tool
-    @ensure_vm()
-    def vm_compile_c_and_upload(self, code: str, dest_path: str, flags: Optional[list[str]] = None) -> Dict[str, Any]:
-        """
-        Compile given C code into a binary using gcc, then upload it to the virtual machine.
-        Use this tool only when the virtual machine is running.
-        - Creates a random subdir under /tmp.
-        - Writes code into 'prog.c'.
-        - Invokes gcc with optional `flags` (by default ["-static"]).
-        - Uploads the binary to `dest_path` in the virtual machine.
-        - Returns dict with {"success": bool, "reason": str}.
+        Use given C code to try to crash the kernel running in the virtual machine.
+        This function starts a fresh VM, compile the provided C `code` with provided `flags`, upload it to the VM and
+        execute it. When the execution finishes or times out, it retrieves the kernel log and parses.
+        Returns a dict with the following schema:
+        {
+            "success": bool,          # True if a kernel crash was detected
+            "reason": str,            # Human friendly reason message
+            "crash_details": list     # Parsed crash details from syz-logparser (if success is True)
+        }
+        Args:
+        code: C code string to compile and run inside the VM.
+        flags: Optional list of gcc flags to use during compilation. Defaults to ["-static"].
+        timeout_sec: Timeout in seconds for executing the uploaded binary inside the VM.
         """
 
+        # Compile code
         if not flags:
             flags = ["-static"]
-
-        if not self.vm.is_running():
-            return {
-                "success": False,
-                "reason": "The virtual machine is not started",
-            }
 
         res = compile_c_code(self.logger, code, flags=flags)
         if not res["success"]:
@@ -262,15 +108,47 @@ class VMInteractPlugin(McpPlugin):
         bin_path = res["binary_path"]
         assert bin_path is not None
 
-        up = self.vm.upload_file(bin_path, dest_path)
+        def cleanup_temp_binary() -> None:
+            try:
+                os.remove(bin_path)
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to remove temp binary {bin_path}: {e}")
+
         try:
-            os.remove(bin_path)
-        except Exception as e:
-            self.logger.warning(
-                f"Failed to remove temp binary {bin_path}: {e}")
-
-        if not up["success"]:
-            return {"success": False, "reason": f"Upload failed: {up['reason']}"}
-        return {"success": True, "reason": ""}
-
-    # No GDB
+            # Restart VM to ensure clean state
+            if not self.vm.restart_vm(timeout_sec=timeout_sec):
+                return {
+                    "success": False,
+                    "reason": "Failed to restart the virtual machine",
+                }
+            
+            # Upload binary
+            up = self.vm.upload_file(bin_path, "/root/poc")
+            if not up["success"]:
+                return {"success": False, "reason": f"Upload failed: {up['reason']}"}
+            
+            # Execute binary
+            try:
+                self.vm.sendline("/root/poc")
+            except Exception as e:
+                self.logger.warning(f"Failed to execute uploaded binary: {e}")
+                return {"success": False, "reason": f"Execution failed: {e}"}
+            
+            # Receive output
+            try:
+                output = self.vm.receive(timeout=timeout_sec)
+            except Exception as e:
+                self.logger.warning(f"Failed to receive output from binary execution: {e}")
+                return {"success": False, "reason": f"Receive failed: {e}"}
+        
+            content = output.get("content", "")
+            parsed = SyzLogparser(logger=self.logger, content=content).parse()
+            if parsed:
+                return {"success": True, "reason": "Kernel crash detected", "crash_details": parsed}
+            else:
+                return {"success": False, "reason": "No crash detected"}
+        finally:
+            cleanup_temp_binary()
