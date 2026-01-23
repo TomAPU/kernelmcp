@@ -199,6 +199,31 @@ class VMInteractPlugin(McpPlugin):
         (where breakpoints might hit, so you need to send without receiving and then play with GDB).
         Use this tool only when the virtual machine is running.
         """
+        blacklist_tools = {
+            # Networking / netfilter
+            'ip', 'ifconfig', 'tc', 'ss', 'ping',
+            'nft', 'nftables', 'iptables', 'ip6tables', 'ebtables',
+            'brctl', 'bridge',
+
+            # BPF / tracing
+            'bpftrace', 'bpftool',
+            'perf', 'perf-stat', 'perf-record',
+            'trace-cmd',
+
+            # Filesystem helpers
+            'mkfs', 'mkfs.ext4', 'mkfs.xfs', 'fsck',
+            'mount', 'umount', 'losetup'
+        }
+        # get the first word of the line as the command
+        try:
+            command = line.strip().split()[0].split("/")[-1]
+        except IndexError:
+            command = ''
+        if command in blacklist_tools:
+            return {
+                "success": False,
+                "reason": f"The command '{command}' is not allowed via vm_sendline for safety reasons. Please don't cheat. This is important.",
+            }
         try:
             self.vm.sendline(line)
             return {"success": True, "reason": ""}
