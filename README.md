@@ -6,6 +6,7 @@ Kernel MCP is an MCP server that supports kernel security analysis.
 ## Docs
 - [Quick Start](./docs/quickstart.md)
 - [Usage](./docs/usage.md)
+- [Full Image Build and Transfer](./docs/fullimage.md)
 - [MCP Kernel Expert Prompt](./docs/sampleprompt.md)
 - [Plugin Development](./docs/plugindev.md)
 - [Details of the Dev Container Script](./docs/devcontainer.md)
