@@ -2,17 +2,19 @@
 set -euo pipefail
 
 USERNAME="$(id -un)"
-FULL_IMAGE_NAME="kernelmcp-full-${USERNAME}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FULL_DOCKERFILE="${SCRIPT_DIR}/Dockerfile.full"
 REPO_REF="$(git -C "${SCRIPT_DIR}" rev-parse HEAD 2>/dev/null || true)"
 BUILDX_BUILDER="kernelmcp-builder-${USERNAME}"
+USE_CLAUDE=0
+FULL_IMAGE_NAME="kernelmcp-full-${USERNAME}"
+FULL_DOCKERFILE="${SCRIPT_DIR}/Dockerfile.full"
 
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [options]
 
 Options:
+  -c, --claude           Build the Claude image variant
   -r, --repo-ref <ref>   Override git ref/commit (default: current HEAD)
   -h, --help             Show this help message
 
@@ -23,6 +25,8 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -c|--claude)
+      USE_CLAUDE=1; shift ;;
     -r|--repo-ref)
       [[ $# -ge 2 ]] || { echo "Error: missing value for $1"; exit 1; }
       REPO_REF="$2"; shift 2 ;;
@@ -32,6 +36,11 @@ while [[ $# -gt 0 ]]; do
       echo "Unknown option: $1"; usage; exit 1 ;;
   esac
 done
+
+if [[ "${USE_CLAUDE}" -eq 1 ]]; then
+  FULL_IMAGE_NAME="kernelmcp-full-${USERNAME}-claude"
+  FULL_DOCKERFILE="${SCRIPT_DIR}/Dockerfile.full.cc"
+fi
 
 [[ -n "${REPO_REF}" ]] || { echo "Error: unable to determine repo ref. Use --repo-ref."; exit 1; }
 [[ -f "${FULL_DOCKERFILE}" ]] || { echo "Error: ${FULL_DOCKERFILE} not found."; exit 1; }
@@ -59,9 +68,18 @@ ensure_buildx_available() {
 ensure_buildx_builder() {
     echo "Ensuring privileged Buildx builder '${BUILDX_BUILDER}' ..."
 
-    # If builder exists, remove it to recreate with correct privileged config
     if docker buildx inspect "${BUILDX_BUILDER}" >/dev/null 2>&1; then
-        echo "Removing existing builder '${BUILDX_BUILDER}' because it may not be privileged..."
+        BUILDER_CONTAINER="buildx_buildkit_${BUILDX_BUILDER}0"
+        BUILDER_ARGS="$(docker inspect "${BUILDER_CONTAINER}" --format '{{json .Args}}' 2>/dev/null || true)"
+
+        if [[ "${BUILDER_ARGS}" == *"security.insecure"* && "${BUILDER_ARGS}" == *"network.host"* ]]; then
+            echo "Reusing existing builder '${BUILDX_BUILDER}'."
+            docker buildx use "${BUILDX_BUILDER}" >/dev/null
+            docker buildx inspect "${BUILDX_BUILDER}"
+            return
+        fi
+
+        echo "Recreating builder '${BUILDX_BUILDER}' with required entitlements..."
         docker buildx rm "${BUILDX_BUILDER}" >/dev/null 2>&1 || true
     fi
 
@@ -84,6 +102,7 @@ build_full_image() {
     --builder "${BUILDX_BUILDER}" \
     --allow security.insecure \
     --load \
+    --progress=plain \
     --build-arg USERNAME="${USERNAME}" \
     --build-arg UID="${MY_UID}" \
     --build-arg GID="${MY_GID}" \
