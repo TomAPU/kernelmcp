@@ -107,8 +107,6 @@ class VMInteractPlugin(McpPlugin):
         # Read config
         ezqm_dir = self.config.data.get("ezqmlocalfolder", "").strip()
         vmprompt = self.config.data.get("vmprompt", "")
-        self.vmoutput = self.config.data.get("vmoutput", "")
-        self.gdboutput = self.config.data.get("gdboutput", "")
 
         if not ezqm_dir:
             self.logger.warning(
@@ -118,9 +116,14 @@ class VMInteractPlugin(McpPlugin):
 
         try:
             self.vm = VMManage(
-                promptstr=vmprompt, ezqmlocalfolder=ezqm_dir, logger=self.logger, vmoutput=self.vmoutput)
+                promptstr=vmprompt,
+                ezqmlocalfolder=ezqm_dir,
+                logger=self.logger,
+            )
+            self.vmoutput = self.vm.runtime_artifact("vmoutput")
+            self.gdboutput = self.vm.runtime_artifact("gdboutput")
             self.logger.info(
-                f"{self.NAME} plugin initialized with ezqm folder: {ezqm_dir}")
+                f"{self.NAME} plugin initialized with ezqm folder: {ezqm_dir} (runtime: {self.vm.project_dir})")
         except FileNotFoundError as e:
             self.logger.error(f"{self.NAME} initialization failed: {e}")
             self.vm = None

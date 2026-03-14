@@ -3,13 +3,16 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 import time
+import uuid
+import weakref
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 import pexpect
 
-from .utils import run_cmd
+from .utils import get_unused_port, run_cmd
 
 
 class VMManage:
@@ -34,25 +37,33 @@ class VMManage:
         promptstr: str = "",
         ezqmlocalfolder: str = ".",
         logger: Optional[logging.Logger] = None,
-        vmoutput: str = "",
     ):
         self.prompt: str = promptstr
         if not self.prompt:
             self.prompt = "root@syzkaller"
 
-        self.project_dir: Path = Path(ezqmlocalfolder).resolve()
+        self.base_project_dir: Path = Path(ezqmlocalfolder).resolve()
         self.logger = logger or logging.getLogger(__name__)
         self.START_MARKER = "__EZQM_CMD_START__"
         self.STOP_MARKER = "__EZQM_CMD_END__"
-        self.vmoutput = vmoutput
         if not self.logger.handlers:
             self.logger.addHandler(logging.NullHandler())
 
         # Validate local config presence
-        self.localconf_path = self.project_dir / "ezqmlocal.json"
-        if not self.localconf_path.exists():
+        source_localconf_path = self.base_project_dir / "ezqmlocal.json"
+        if not source_localconf_path.exists():
             raise FileNotFoundError(
-                f"ezqmlocal.json not found in {self.project_dir}")
+                f"ezqmlocal.json not found in {self.base_project_dir}")
+
+        self.project_dir = self._prepare_runtime_dir()
+        self._runtime_cleanup = weakref.finalize(
+            self,
+            self._cleanup_runtime_dir,
+            self.project_dir,
+        )
+
+        self.vmoutput = self.runtime_artifact("vmoutput")
+        self.localconf_path = self.project_dir / "ezqmlocal.json"
 
         with open(self.localconf_path, "r", encoding="utf-8") as f:
             self.localconf: Dict[str, Any] = json.load(f)
@@ -62,6 +73,64 @@ class VMManage:
 
         # Precompile prompt regex (literal match of promptstr)
         self._prompt_re = re.compile(re.escape(self.prompt))
+
+    @staticmethod
+    def _cleanup_runtime_dir(path: Path) -> None:
+        shutil.rmtree(path, ignore_errors=True)
+
+    def _prepare_runtime_dir(self) -> Path:
+        runtime_root = self.base_project_dir / ".kernelmcp-runtime"
+        runtime_root.mkdir(parents=True, exist_ok=True)
+
+        runtime_dir = runtime_root / uuid.uuid4().hex
+        runtime_dir.mkdir(parents=True, exist_ok=False)
+
+        with open(self.base_project_dir / "ezqmlocal.json", "r", encoding="utf-8") as f:
+            base_localconf = json.load(f)
+        runtime_localconf = self._rewrite_localconf_ports(base_localconf)
+
+        for entry in self.base_project_dir.iterdir():
+            if entry.name in {"ezqmlocal.json", runtime_root.name}:
+                continue
+            target = runtime_dir / entry.name
+            self._link_or_copy(entry, target)
+
+        with open(runtime_dir / "ezqmlocal.json", "w", encoding="utf-8") as f:
+            json.dump(runtime_localconf, f, indent=2)
+
+        self.logger.debug(
+            "Prepared isolated EZQM runtime directory %s from %s",
+            runtime_dir,
+            self.base_project_dir,
+        )
+        return runtime_dir
+
+    def _link_or_copy(self, source: Path, target: Path) -> None:
+        try:
+            target.symlink_to(source, target_is_directory=source.is_dir())
+        except OSError:
+            if source.is_dir():
+                shutil.copytree(source, target, symlinks=True)
+            else:
+                shutil.copy2(source, target)
+
+    def _rewrite_localconf_ports(self, node: Any) -> Any:
+        if isinstance(node, dict):
+            rewritten: Dict[str, Any] = {}
+            for key, value in node.items():
+                if isinstance(value, int) and value > 0 and key.lower().endswith("port"):
+                    rewritten[key] = get_unused_port()
+                else:
+                    rewritten[key] = self._rewrite_localconf_ports(value)
+            return rewritten
+        if isinstance(node, list):
+            return [self._rewrite_localconf_ports(item) for item in node]
+        return node
+
+    def runtime_artifact(self, name: str) -> str:
+        runtime_path = self.project_dir / name
+        runtime_path.parent.mkdir(parents=True, exist_ok=True)
+        return str(runtime_path)
 
     # ---------- helpers ----------
 

@@ -228,8 +228,6 @@ def main() -> Optional[argparse.Namespace]:
         "db_path": os.path.join(project_path, "linux.cqdb"),
         "code_path": linux_path,
         "ezqmlocalfolder": project_path,
-        "vmoutput": os.path.join(project_path, "vmoutput"),
-        "gdboutput": os.path.join(project_path, "gdboutput"),
     }
 
     try:
