@@ -163,6 +163,7 @@ class VMInteractPlugin(McpPlugin):
             }
         # Delete and recreate GDB instance to reset connection state
         if getattr(self, 'gdb', None):
+            self.gdb.close()
             del self.gdb
             gdbport = self.vm.localconf.get("gdbport", 0)
             vmlinux = self.vm.localconf.get("vmlinux", "")
