@@ -37,6 +37,12 @@ def initialize_ezqm_project(project_path: str, linux_path: str, logger: logging.
     init_cmd = ["ezcf", "--init-local", linux_path]
     logger.info("Running ezcf initialization: %s", " ".join(init_cmd))
     run_cmd(init_cmd, logger=logger, cwd=project_path)
+    
+    # Step 1.5 for kernelCTF image we set qemu command template
+    # 3584 is the real RAM size, but it's too big. 1024 is good enough for triaging 
+    custom_qemu_cmd = ["ezcf", "-l", "-u", "qemucmd", "{qemu_binary} -m 1024 -gdb tcp::{gdbport} -monitor tcp::{qemuport},server,nowait -smp 2 -display none -chardev stdio,id=char0,logfile={outputfile},signal=off -serial chardev:char0 -no-reboot -device virtio-rng-pci -enable-kvm -cpu host,migratable=on -device virtio-net-pci,netdev=net0 -nographic -snapshot -netdev user,id=net0,restrict=on,hostfwd=tcp:127.0.0.1:{sshport}-:22 -drive file={diskimage} -kernel {bzImage} -append 'nokaslr console=ttyS0 root=/dev/sda rw kasan_multi_shot=1 printk.synchronous=1 net.ifnames=0 biosdevname=0'"]
+    logger.info("Setting custom qemu command for kernelCTF image")
+    run_cmd(custom_qemu_cmd, logger=logger, cwd=project_path)
 
     # Step 2: ezqm -b
     build_cmd = ["ezqm", "-b"]
